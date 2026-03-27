@@ -11,13 +11,16 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import os
 import sys
 from pathlib import Path
 
 import torch
 import yaml
+from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 # Allow imports from project root
@@ -168,6 +171,23 @@ def train(cfg: dict) -> None:
     ckpt_dir = Path(cfg["checkpoint"]["save_dir"])
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
+    # AMP scaler (BF16 for Blackwell Tensor Cores)
+    scaler = GradScaler()
+
+    # TensorBoard writer
+    model_name = cfg["model"]["name"]
+    tb_dir = Path(tr_cfg.get("output_dir", "outputs")) / "runs" / model_name
+    writer = SummaryWriter(log_dir=str(tb_dir))
+
+    # CSV log
+    log_path = ckpt_dir / "train_log.csv"
+    log_file = open(log_path, "w", newline="", encoding="utf-8")
+    csv_writer = csv.writer(log_file)
+    csv_writer.writerow(["epoch", "train_loss", "iou", "dice", "precision", "recall"])
+
+    print(f"TensorBoard logs → {tb_dir}")
+    print(f"CSV log         → {log_path}")
+
     best_iou = 0.0
     save_every = cfg["checkpoint"].get("save_every_n_epochs", 10)
 
@@ -176,15 +196,18 @@ def train(cfg: dict) -> None:
         running_loss = 0.0
         for imgs, masks in tqdm(train_loader, desc=f"Epoch {epoch}/{tr_cfg['epochs']}"):
             imgs, masks = imgs.to(device), masks.to(device)
-            logits = model(imgs)
-            loss = criterion(logits, masks)
+            with autocast(dtype=torch.bfloat16):
+                logits = model(imgs)
+                loss = criterion(logits, masks)
             optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
             running_loss += loss.item()
 
         scheduler.step()
         avg_loss = running_loss / len(train_loader)
+        writer.add_scalar("Loss/train", avg_loss, epoch)
 
         # Periodic validation
         if epoch % 5 == 0 or epoch == tr_cfg["epochs"]:
@@ -195,6 +218,16 @@ def train(cfg: dict) -> None:
                 f"IoU={iou:.4f} Dice={metrics['dice']:.4f} "
                 f"P={metrics['precision']:.4f} R={metrics['recall']:.4f}"
             )
+            writer.add_scalar("Metrics/IoU", iou, epoch)
+            writer.add_scalar("Metrics/Dice", metrics["dice"], epoch)
+            writer.add_scalar("Metrics/Precision", metrics["precision"], epoch)
+            writer.add_scalar("Metrics/Recall", metrics["recall"], epoch)
+            csv_writer.writerow([
+                epoch, f"{avg_loss:.4f}", f"{iou:.4f}",
+                f"{metrics['dice']:.4f}", f"{metrics['precision']:.4f}", f"{metrics['recall']:.4f}",
+            ])
+            log_file.flush()
+
             if iou > best_iou:
                 best_iou = iou
                 torch.save(model.state_dict(), ckpt_dir / "best.pth")
@@ -207,6 +240,9 @@ def train(cfg: dict) -> None:
 
     print(f"\nTraining complete. Best val IoU: {best_iou:.4f}")
     print(f"Best checkpoint: {ckpt_dir / 'best.pth'}")
+
+    writer.close()
+    log_file.close()
 
 
 # ---------------------------------------------------------------------------
