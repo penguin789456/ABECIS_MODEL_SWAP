@@ -12,7 +12,7 @@ training:
   optimizer: adamw
   lr: 1.0e-4
   weight_decay: 1.0e-4
-  batch_size: 8
+  batch_size: 4
   epochs: 100
   warmup_epochs: 5
   scheduler: cosine
@@ -27,9 +27,9 @@ loss:
 dataset:
   root: concreteCrackSegmentationDataset
   splits_dir: data/splits
-  patch_size: 512
-  overlap: 128
-  num_workers: 4
+  patch_size: 256
+  overlap: 64
+  num_workers: 2
   pin_memory: true
 
 checkpoint:
