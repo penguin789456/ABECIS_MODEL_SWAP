@@ -3,7 +3,11 @@
 ## 專案狀態
 - **分支**：`dev/Model_First_traing`
 - **Scaffold 完成**：所有模組已建立（data/, configs/, models/, training/, evaluation/, scripts/, notebooks/）
-- **待完成**：執行 `python scripts/prepare_dataset.py` 產生 `data/splits/*.txt`，再 commit splits
+- **Splits 完成**：train(320) / val(68) / test(70)，已 commit
+- **待完成**：手動執行訓練（見下方「訓練教學」）
+- **已修正**（2026-03-27）：
+  - DeepLabV3+ `in_channels` 從 backbone 動態讀取（commit `fc383e0`）
+  - albumentations 鎖定 1.4.21，避免 2.x breaking change（commit `e581144`）
 
 ## 架構概覽
 ```
@@ -69,6 +73,83 @@ concreteCrackSegmentationDataset/
 - 分割：IoU（主）、Dice、Precision、Recall
 - 效率：FPS、推論時間(ms)、參數量、模型大小
 - 後處理：skeletonization、裂縫長度估計、連續性分析
+
+## 訓練教學
+
+### 前置確認
+```bash
+conda activate CrackSeg
+cd H:\碩士\dev\ABECIS_MODEL_SWAP
+
+# 確認 CUDA 正常
+python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
+```
+
+### 訓練各模型（依序執行）
+
+```bash
+# 1. DeepLabV3+（語意分割基準）
+python training/train_crackseg.py --config configs/deeplabv3plus.yaml
+
+# 2. PP-LiteSeg（需先 clone zh320 repo，見下方）
+python training/train_crackseg.py --config configs/ppliteseg.yaml
+
+# 3. PIDNet
+python training/train_crackseg.py --config configs/pidnet.yaml
+
+# 4. Mask R-CNN（切換環境）
+conda activate CrackPre
+python training/train_maskrcnn.py --config configs/maskrcnn.yaml
+```
+
+### PP-LiteSeg / PIDNet 前置（首次執行）
+```bash
+git clone https://github.com/zh320/realtime-semantic-segmentation-pytorch
+```
+
+### 監控訓練
+
+**TensorBoard**（開新終端機）
+```bash
+conda activate CrackSeg
+tensorboard --logdir outputs/runs --port 6006
+# 瀏覽器開啟 http://localhost:6006
+```
+
+**GPU 使用狀況**
+```bash
+nvidia-smi -l 1
+```
+
+**Jupyter Lab**（分析 notebooks）
+```bash
+conda activate CrackSeg
+jupyter lab --notebook-dir=notebooks --port 8888
+# 瀏覽器開啟 http://localhost:8888
+```
+
+### 輸出位置
+```
+outputs/
+├── checkpoints/{deeplabv3plus,ppliteseg,pidnet,maskrcnn}/
+│   ├── best.pth          ← 最佳 val IoU checkpoint
+│   └── epoch_10.pth ...  ← 每 10 epoch 儲存
+├── predictions/          ← 推論後 PNG masks
+└── results/
+    └── metrics_summary.csv
+```
+
+### 常見錯誤
+
+| 錯誤訊息 | 解法 |
+|---------|------|
+| `CUDA out of memory` | 降低 batch_size：`configs/deeplabv3plus.yaml` → `batch_size: 4` |
+| `in_channels mismatch` | 確認使用最新代碼（`git pull`），已於 fc383e0 修正 |
+| albumentations update 警告 | 無害，可忽略；或設 `NO_ALBUMENTATIONS_UPDATE=1` |
+| `No module named detectron2` | Mask R-CNN 需切換至 `CrackPre` 環境 |
+| PP-LiteSeg/PIDNet import error | 確認已 clone zh320 repo 至專案根目錄 |
+
+---
 
 ## 環境
 
