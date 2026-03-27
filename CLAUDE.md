@@ -1,5 +1,40 @@
 # CLAUDE.md
 
+## 專案狀態
+- **分支**：`dev/Model_First_traing`
+- **Scaffold 完成**：所有模組已建立（data/, configs/, models/, training/, evaluation/, scripts/, notebooks/）
+- **待完成**：執行 `python scripts/prepare_dataset.py` 產生 `data/splits/*.txt`，再 commit splits
+
+## 架構概覽
+```
+data/dataset.py          ← CrackDataset（512×512 patch, LRU cache, .jpg/.JPG fix）
+data/transforms.py       ← Albumentations train/val/test pipelines
+data/split.py            ← 70/15/15 split generator（seed=42）
+configs/                 ← base.yaml + 4 model overrides
+models/deeplabv3plus.py  ← torchvision wrapper, binary output
+models/losses.py         ← BCEDiceLoss（weighted BCE + soft Dice）
+training/train_crackseg.py      ← unified trainer（DeepLabV3+/PP-LiteSeg/PIDNet）
+training/train_maskrcnn.py      ← Detectron2 DefaultTrainer subclass
+training/lr_scheduler.py        ← warmup(5ep) + CosineAnnealingLR
+evaluation/metrics.py           ← IoU, Dice, Precision, Recall
+evaluation/postprocess.py       ← skeletonize, crack_length, continuity_score
+evaluation/inference_crackseg.py ← CrackSeg env → PNG masks
+evaluation/inference_maskrcnn.py ← CrackPre env → PNG masks
+evaluation/evaluate.py          ← env-agnostic evaluator → metrics_summary.csv
+scripts/prepare_dataset.py      ← 第一步執行：validate + splits + COCO JSON
+scripts/run_eval_all.bat        ← 兩個 env 推論 + 評估
+```
+
+## 雙環境推論流程
+```
+CrackPre: inference_maskrcnn.py → outputs/predictions/maskrcnn/
+CrackSeg: inference_crackseg.py → outputs/predictions/{deeplabv3+,ppliteseg,pidnet}/
+                    ↓
+          evaluate.py（numpy/PIL only）
+                    ↓
+          outputs/results/metrics_summary.csv
+```
+
 ## 資料集
 ```
 concreteCrackSegmentationDataset/
