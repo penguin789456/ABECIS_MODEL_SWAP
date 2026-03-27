@@ -130,6 +130,10 @@ class CrackDataset(Dataset):
         rgb_p, bw_p = self.image_pairs[img_idx]
         rgb = np.array(Image.open(rgb_p).convert("RGB"))
         bw = np.array(Image.open(bw_p).convert("L"))
+        # Some BW masks were saved rotated 90° relative to the RGB image.
+        # Detect W/H swap and transpose to match.
+        if rgb.shape[:2] != bw.shape[:2] and rgb.shape[:2] == bw.shape[:2][::-1]:
+            bw = bw.T
         self._cache[img_idx] = (rgb, bw)
         self._cache.move_to_end(img_idx)
         if len(self._cache) > self.cache_size:
