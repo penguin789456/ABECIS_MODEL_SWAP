@@ -131,12 +131,14 @@ def train(cfg: dict) -> None:
         transform=get_val_transforms(),
     )
 
+    persistent = ds_cfg.get("persistent_workers", False) and ds_cfg["num_workers"] > 0
     train_loader = DataLoader(
         train_ds,
         batch_size=cfg["training"]["batch_size"],
         shuffle=True,
         num_workers=ds_cfg["num_workers"],
         pin_memory=ds_cfg["pin_memory"],
+        persistent_workers=persistent,
     )
     val_loader = DataLoader(
         val_ds,
