@@ -1,0 +1,44 @@
+# PP-LiteSeg-T (STDC1) — primary lightweight model
+# Uses zh320/realtime-semantic-segmentation-pytorch as backbone implementation
+
+model:
+  name: ppliteseg
+  backbone: STDC1
+  pretrained: true
+  num_classes: 1
+  # Path relative to project root (after cloning zh320 repo)
+  zh320_config: realtime-semantic-segmentation-pytorch/configs/ppliteseg_stdc1.py
+
+training:
+  optimizer: adamw
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  batch_size: 8
+  epochs: 100
+  warmup_epochs: 5
+  scheduler: cosine
+  seed: 42
+  output_dir: outputs
+
+loss:
+  type: bce_dice
+  bce_weight: 0.5
+  dice_weight: 0.5
+
+dataset:
+  root: concreteCrackSegmentationDataset
+  splits_dir: data/splits
+  patch_size: 512
+  overlap: 128
+  num_workers: 4
+  pin_memory: true
+
+checkpoint:
+  save_dir: outputs/checkpoints/ppliteseg
+  save_best_metric: iou
+  save_every_n_epochs: 10
+
+evaluation:
+  metrics: [iou, dice, precision, recall]
+  save_predictions: true
+  predictions_dir: outputs/predictions/ppliteseg

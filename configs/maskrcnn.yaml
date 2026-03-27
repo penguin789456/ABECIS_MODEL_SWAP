@@ -1,0 +1,38 @@
+# Mask R-CNN R50-FPN — instance segmentation baseline
+# Runs inside CrackPre conda environment (Detectron2)
+
+model:
+  name: maskrcnn
+  config_file: COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml
+  pretrained_weights: detectron2://ImageNetPretrained/MSRA/R-50.pkl
+
+training:
+  optimizer: sgd
+  lr: 0.001
+  momentum: 0.9
+  weight_decay: 1.0e-4
+  batch_size: 2              # ROI_HEADS.BATCH_SIZE_PER_IMAGE
+  # 50 effective epochs: ceil(320 images / 2 per batch) * 50 ≈ 8000 iter
+  max_iter: 8000
+  warmup_iters: 200
+  lr_steps: [5000, 7000]    # MultiStepLR decay points
+  seed: 42
+  output_dir: outputs
+
+dataset:
+  root: concreteCrackSegmentationDataset
+  splits_dir: data/splits
+  coco_annotations_dir: outputs/coco_annotations
+
+dataset_detectron2:
+  thing_classes: ["crack"]
+  mask_format: bitmask
+
+checkpoint:
+  save_dir: outputs/checkpoints/maskrcnn
+  eval_period: 500           # evaluate every N iterations
+
+evaluation:
+  metrics: [iou, dice, precision, recall]
+  save_predictions: true
+  predictions_dir: outputs/predictions/maskrcnn

@@ -205,3 +205,17 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Training dataset and large reference files
+concreteCrackSegmentationDataset/
+PP-LiteSeg.pdf
+detectron2.pdf
+
+# Training outputs (checkpoints, predictions, logs, results)
+outputs/
+
+# Third-party cloned repos
+realtime-semantic-segmentation-pytorch/
+
+# Thesis document
+論文修改完成.docx

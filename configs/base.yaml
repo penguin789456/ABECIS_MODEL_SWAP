@@ -1,0 +1,23 @@
+# Base configuration — shared defaults for all models
+# Model-specific configs override individual fields
+
+dataset:
+  root: concreteCrackSegmentationDataset
+  splits_dir: data/splits
+  patch_size: 512
+  overlap: 128
+  num_workers: 4
+  pin_memory: true
+
+training:
+  seed: 42
+  output_dir: outputs
+
+evaluation:
+  metrics: [iou, dice, precision, recall]
+  iou_threshold: 0.5
+  save_predictions: true
+
+postprocess:
+  skeletonize: true
+  min_crack_length_px: 50
