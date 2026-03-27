@@ -27,8 +27,10 @@ class DeepLabV3Plus(nn.Module):
         weights = "DEFAULT" if pretrained else None
         self.model: DeepLabV3 = deeplabv3_resnet101(weights=weights)
 
-        # Replace the default 21-class PASCAL VOC head with a 1-class head
-        in_channels = self.model.classifier[0].project[0].in_channels  # 2048
+        # Replace the default classification head with a 1-class head.
+        # ResNet-101 backbone outputs 2048 channels; read from the backbone
+        # to be robust to future weight variants.
+        in_channels = self.model.backbone.layer4[-1].conv3.out_channels  # 2048
         self.model.classifier = DeepLabHead(in_channels, num_classes=1)
 
         # Remove the auxiliary classifier (not needed for inference / our loss)
