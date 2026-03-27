@@ -216,7 +216,7 @@ if __name__ == "__main__":
     parser.add_argument("--config", required=True, help="Path to YAML config file")
     args = parser.parse_args()
 
-    with open(args.config) as f:
+    with open(args.config, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
     train(cfg)
