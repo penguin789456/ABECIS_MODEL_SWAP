@@ -84,6 +84,40 @@ scripts\run_eval_all.bat
 
 ---
 
+## Development Tools
+
+### Jupyter Lab
+
+用於執行 `notebooks/` 下的資料探索與結果視覺化筆記本。
+
+```bash
+conda activate CrackSeg
+jupyter lab --notebook-dir=notebooks --no-browser --port=8888
+```
+
+開啟後在瀏覽器訪問：`http://localhost:8888`
+
+| Notebook | 用途 |
+|----------|------|
+| `01_data_exploration.ipynb` | 資料集統計與影像瀏覽 |
+| `02_patch_visualization.ipynb` | 512×512 patch 切分視覺化 |
+| `03_results_comparison.ipynb` | 四個模型評估結果比較 |
+
+### TensorBoard
+
+用於訓練時監控 loss 與 metrics 曲線。訓練腳本需先輸出 log 至 `outputs/runs/`。
+
+```bash
+conda activate CrackSeg
+tensorboard --logdir=outputs/runs --port=6006
+```
+
+開啟後在瀏覽器訪問：`http://localhost:6006`
+
+> **注意**：需先執行訓練腳本產生 log 資料，TensorBoard 才有內容可顯示。
+
+---
+
 ## Project Structure
 
 ```
