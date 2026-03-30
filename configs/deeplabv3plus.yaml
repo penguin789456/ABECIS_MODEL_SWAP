@@ -27,11 +27,13 @@ loss:
 dataset:
   root: concreteCrackSegmentationDataset
   splits_dir: data/splits
-  patch_size: 256
-  overlap: 64
-  num_workers: 8
+  patch_size: 512
+  overlap: 128
+  num_workers: 4
+  prefetch_factor: 4
   pin_memory: true
   persistent_workers: true
+  precomputed_dir: data/patches
 
 checkpoint:
   save_dir: outputs/checkpoints/deeplabv3plus

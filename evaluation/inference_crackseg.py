@@ -89,7 +89,8 @@ def run_inference(cfg: dict) -> None:
     ckpt_path = Path(cfg["checkpoint"]["save_dir"]) / "best.pth"
     if not ckpt_path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
-    model.load_state_dict(torch.load(ckpt_path, map_location=device))
+    ckpt = torch.load(ckpt_path, map_location=device)
+    model.load_state_dict(ckpt["model"] if "model" in ckpt else ckpt)
     print(f"Loaded: {ckpt_path}")
 
     transform = get_test_transforms()
