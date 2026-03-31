@@ -192,6 +192,7 @@ def train(cfg: dict) -> None:
     criterion = BCEDiceLoss(
         bce_weight=loss_cfg["bce_weight"],
         dice_weight=loss_cfg["dice_weight"],
+        pos_weight=loss_cfg.get("pos_weight", None),
     )
 
     tr_cfg = cfg["training"]
@@ -206,16 +207,19 @@ def train(cfg: dict) -> None:
         total_epochs=tr_cfg["epochs"],
     )
 
-    # Checkpoint directory
-    ckpt_dir = Path(cfg["checkpoint"]["save_dir"])
+    # Timestamped run ID — shared by TensorBoard, checkpoints, and CSV
+    model_name = cfg["model"]["name"]
+    run_ts = time.strftime("%Y%m%d_%H%M%S")
+
+    # Checkpoint directory — timestamped subfolder per run
+    ckpt_dir = Path(cfg["checkpoint"]["save_dir"]) / run_ts
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
     # AMP scaler (BF16 for Blackwell Tensor Cores)
     scaler = GradScaler()
 
-    # TensorBoard writer
-    model_name = cfg["model"]["name"]
-    tb_dir = Path(tr_cfg.get("output_dir", "outputs")) / "runs" / model_name
+    # TensorBoard writer — same timestamp as checkpoint folder
+    tb_dir = Path(tr_cfg.get("output_dir", "outputs")) / "runs" / model_name / run_ts
     writer = SummaryWriter(log_dir=str(tb_dir))
 
     # CSV log — complete record for thesis
@@ -276,7 +280,9 @@ def train(cfg: dict) -> None:
         torch.cuda.reset_peak_memory_stats(device)
 
         # Validation every epoch
-        metrics, avg_val_loss = validate(model, val_loader, device, criterion)
+        threshold = cfg.get("evaluation", {}).get("threshold", 0.5)
+        metrics, avg_val_loss = validate(model, val_loader, device, criterion,
+                                         threshold=threshold)
         iou = metrics["iou"]
 
         print(

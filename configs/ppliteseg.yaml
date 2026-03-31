@@ -14,7 +14,7 @@ training:
   lr: 1.0e-4
   weight_decay: 1.0e-4
   batch_size: 32
-  epochs: 100
+  epochs: 150
   warmup_epochs: 5
   scheduler: cosine
   seed: 42
@@ -22,8 +22,9 @@ training:
 
 loss:
   type: bce_dice
-  bce_weight: 0.5
-  dice_weight: 0.5
+  bce_weight: 0.4
+  dice_weight: 0.6
+  pos_weight: 1.5
 
 dataset:
   root: concreteCrackSegmentationDataset
@@ -43,5 +44,6 @@ checkpoint:
 
 evaluation:
   metrics: [iou, dice, precision, recall]
+  threshold: 0.4
   save_predictions: true
   predictions_dir: outputs/predictions/ppliteseg
