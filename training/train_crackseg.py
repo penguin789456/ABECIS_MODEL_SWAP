@@ -76,7 +76,14 @@ def build_model(model_cfg: dict) -> torch.nn.Module:
                 "Run: git clone https://github.com/zh320/realtime-semantic-segmentation-pytorch"
             )
         sys.path.insert(0, str(zh320_root))
-        from models.pidnet import PIDNet  # type: ignore[import]
+        _saved = {k: v for k, v in list(sys.modules.items())
+                  if k == "models" or k.startswith("models.")}
+        for k in _saved:
+            del sys.modules[k]
+        try:
+            from models.pidnet import PIDNet  # type: ignore[import]
+        finally:
+            sys.modules.update(_saved)
         return PIDNet(
             num_classes=1,
             variant=model_cfg.get("variant", "pidnet_s"),
@@ -209,10 +216,17 @@ def train(cfg: dict) -> None:
 
     # Timestamped run ID — shared by TensorBoard, checkpoints, and CSV
     model_name = cfg["model"]["name"]
-    run_ts = time.strftime("%Y%m%d_%H%M%S")
+    resume_path = cfg.get("resume")
+    stable_ckpt_dir = Path(cfg["checkpoint"]["save_dir"])
 
-    # Checkpoint directory — timestamped subfolder per run
-    ckpt_dir = Path(cfg["checkpoint"]["save_dir"]) / run_ts
+    if resume_path:
+        # Resume: reuse original run folder so TensorBoard curve is continuous
+        ckpt_dir = Path(resume_path).parent
+        run_ts = ckpt_dir.name
+    else:
+        run_ts = time.strftime("%Y%m%d_%H%M%S")
+        ckpt_dir = stable_ckpt_dir / run_ts
+
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
     # AMP scaler (BF16 for Blackwell Tensor Cores)
@@ -242,7 +256,6 @@ def train(cfg: dict) -> None:
     save_every  = cfg["checkpoint"].get("save_every_n_epochs", 10)
 
     # Resume from checkpoint if specified
-    resume_path = cfg.get("resume")
     if resume_path:
         ckpt = torch.load(resume_path, map_location=device)
         model.load_state_dict(ckpt["model"])
@@ -277,7 +290,8 @@ def train(cfg: dict) -> None:
             torch.cuda.max_memory_allocated(device) / 1e9
             if device.type == "cuda" else 0.0
         )
-        torch.cuda.reset_peak_memory_stats(device)
+        if device.type == "cuda":
+            torch.cuda.reset_peak_memory_stats(device)
 
         # Validation every epoch
         threshold = cfg.get("evaluation", {}).get("threshold", 0.5)
@@ -317,14 +331,19 @@ def train(cfg: dict) -> None:
         # Checkpoint: best val IoU
         if iou > best_iou:
             best_iou = iou
-            torch.save({
+            ckpt_payload = {
                 "epoch":     epoch,
                 "model":     model.state_dict(),
                 "optimizer": optimizer.state_dict(),
                 "scheduler": scheduler.state_dict(),
                 "scaler":    scaler.state_dict(),
                 "best_iou":  best_iou,
-            }, ckpt_dir / "best.pth")
+            }
+            # 1. Timestamped run folder (for per-run history)
+            torch.save(ckpt_payload, ckpt_dir / "best.pth")
+            # 2. Stable root path consumed by inference_crackseg.py
+            stable_ckpt_dir.mkdir(parents=True, exist_ok=True)
+            torch.save(ckpt_payload, stable_ckpt_dir / "best.pth")
             print(f"  -> Saved best.pth (IoU={best_iou:.4f})")
 
         # Checkpoint: periodic

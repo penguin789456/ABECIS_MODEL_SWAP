@@ -15,6 +15,9 @@ Output structure:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
+import shutil
 import sys
 import yaml
 import numpy as np
@@ -24,6 +27,15 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from data.dataset import _pad
+
+
+def _make_manifest(split_file: Path, patch_size: int, overlap: int) -> dict:
+    lines = split_file.read_text(encoding="utf-8").strip().splitlines()
+    return {
+        "split_hash": hashlib.md5("\n".join(sorted(lines)).encode()).hexdigest(),
+        "patch_size": patch_size,
+        "overlap": overlap,
+    }
 
 
 def precompute(
@@ -52,8 +64,21 @@ def precompute(
             continue
 
         stems = [ln.strip() for ln in split_file.read_text(encoding="utf-8").splitlines() if ln.strip()]
-        rgb_out = out / split / "rgb"
-        mask_out = out / split / "mask"
+        out_split = out / split
+        manifest_path = out_split / "manifest.json"
+        manifest = _make_manifest(split_file, patch_size, overlap)
+
+        # Validate cache: skip if up-to-date, rebuild if stale
+        if manifest_path.exists():
+            old = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if old == manifest:
+                print(f"  [{split}] cache up-to-date, skipping")
+                continue
+            shutil.rmtree(out_split)
+            print(f"  [{split}] config changed, rebuilding cache")
+
+        rgb_out = out_split / "rgb"
+        mask_out = out_split / "mask"
         rgb_out.mkdir(parents=True, exist_ok=True)
         mask_out.mkdir(parents=True, exist_ok=True)
 
@@ -68,8 +93,9 @@ def precompute(
 
             rgb = np.array(Image.open(rgb_p).convert("RGB"))
             bw = np.array(Image.open(bw_p).convert("L"))
-            if rgb.shape[:2] != bw.shape[:2] and rgb.shape[:2] == bw.shape[:2][::-1]:
-                bw = bw.T
+            if rgb.shape[:2] != bw.shape[:2]:
+                bw = np.array(Image.fromarray(bw).resize(
+                    (rgb.shape[1], rgb.shape[0]), Image.NEAREST))
 
             H, W = rgb.shape[:2]
             ys = list(range(0, max(H - patch_size, 0) + 1, stride))
@@ -100,7 +126,9 @@ def precompute(
                     np.save(mask_out / name, msk_p)
                     total += 1
 
-        print(f"  [{split}] {total} patches → {out / split}")
+        # Write manifest last — guarantees cache is only marked valid when complete
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        print(f"  [{split}] {total} patches → {out_split}")
 
 
 if __name__ == "__main__":
