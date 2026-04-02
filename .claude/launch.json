@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Jupyter Lab",
+      "runtimeExecutable": "conda",
+      "runtimeArgs": ["run", "-n", "CrackSeg", "jupyter", "lab", "--notebook-dir=notebooks", "--no-browser", "--port=8888"],
+      "port": 8888
+    },
+    {
+      "name": "TensorBoard",
+      "runtimeExecutable": "conda",
+      "runtimeArgs": ["run", "-n", "CrackSeg", "tensorboard", "--logdir=outputs/runs", "--port=6006"],
+      "port": 6006
+    }
+  ]
+}

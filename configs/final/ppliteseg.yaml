@@ -1,0 +1,67 @@
+# ============================================================
+# PP-LiteSeg-T (STDC1) — FINALIZED CONFIG
+# ============================================================
+# Status   : DONE
+# Best IoU : 0.3755  (val, pixel-level)
+# Precision: 0.8116
+# Recall   : 0.4114
+# Dice     : 0.5460
+# Threshold: 0.60  (confirmed via threshold_sweep.py)
+# Checkpoint: outputs/checkpoints/ppliteseg/20260402_141530/best.pth
+# Epochs   : 146 / 150 (early-stop not triggered; cosine decay reached near-zero LR)
+# Date     : 2026-04-02
+#
+# Key findings:
+#   - BCEDice with positive patch oversampling (weight=5x) is the stable setting
+#   - FN-penalty losses (pos_weight, FocalTversky) all caused degenerate all-positive collapse
+#   - FocalDice gave no recall improvement
+#   - Oversampling + augmentation: +0.027 IoU over baseline (0.35 -> 0.3755)
+#   - Recall ceiling ~0.41 under current data distribution
+# ============================================================
+
+model:
+  name: ppliteseg
+  backbone: STDC1
+  pretrained: true
+  num_classes: 1
+  zh320_config: realtime-semantic-segmentation-pytorch/configs/ppliteseg_stdc1.py
+
+training:
+  optimizer: adamw
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  batch_size: 32
+  epochs: 150
+  warmup_epochs: 5
+  scheduler: cosine
+  seed: 42
+  output_dir: outputs
+
+loss:
+  type: bce_dice
+  bce_weight: 0.5
+  dice_weight: 0.5
+
+dataset:
+  root: concreteCrackSegmentationDataset
+  splits_dir: data/splits
+  precomputed_dir: data/patches
+  patch_size: 512
+  overlap: 128
+  num_workers: 4
+  prefetch_factor: 4
+  pin_memory: true
+  persistent_workers: true
+  oversample_positive: true
+  positive_weight: 5.0
+
+checkpoint:
+  save_dir: outputs/checkpoints/ppliteseg
+  save_best_metric: iou
+  save_every_n_epochs: 10
+
+evaluation:
+  metrics: [iou, dice, precision, recall]
+  threshold: 0.60
+  save_predictions: true
+  predictions_dir: outputs/predictions/ppliteseg

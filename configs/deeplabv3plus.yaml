@@ -6,13 +6,13 @@ model:
   backbone: resnet101
   pretrained: true
   num_classes: 1          # binary segmentation
-  output_stride: 16
+  output_stride: 8
 
 training:
   optimizer: adamw
-  lr: 1.0e-4
+  lr: 2.0e-4
   weight_decay: 1.0e-4
-  batch_size: 8
+  batch_size: 32
   epochs: 100
   warmup_epochs: 5
   scheduler: cosine
@@ -21,8 +21,8 @@ training:
 
 loss:
   type: bce_dice
-  bce_weight: 0.5
-  dice_weight: 0.5
+  bce_weight: 0.3
+  dice_weight: 0.7
 
 dataset:
   root: concreteCrackSegmentationDataset
@@ -30,7 +30,10 @@ dataset:
   patch_size: 512
   overlap: 128
   num_workers: 4
+  prefetch_factor: 4
   pin_memory: true
+  persistent_workers: true
+  precomputed_dir: data/patches
 
 checkpoint:
   save_dir: outputs/checkpoints/deeplabv3plus
