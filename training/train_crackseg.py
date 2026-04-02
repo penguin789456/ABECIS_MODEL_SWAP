@@ -20,7 +20,7 @@ from pathlib import Path
 import torch
 import yaml
 from torch.cuda.amp import GradScaler, autocast
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
@@ -149,6 +149,8 @@ def train(cfg: dict) -> None:
         train_ds = PrecomputedCrackDataset(
             str(Path(precomputed_dir) / "train"),
             transform=get_train_transforms(ds_cfg["patch_size"]),
+            oversample_positive=ds_cfg.get("oversample_positive", False),
+            positive_weight=ds_cfg.get("positive_weight", 5.0),
         )
         val_ds = PrecomputedCrackDataset(
             str(Path(precomputed_dir) / "val"),
@@ -172,15 +174,44 @@ def train(cfg: dict) -> None:
 
     persistent = ds_cfg.get("persistent_workers", False) and ds_cfg["num_workers"] > 0
     prefetch = ds_cfg.get("prefetch_factor", 2)
-    train_loader = DataLoader(
-        train_ds,
-        batch_size=cfg["training"]["batch_size"],
-        shuffle=True,
-        num_workers=ds_cfg["num_workers"],
-        pin_memory=ds_cfg["pin_memory"],
-        persistent_workers=persistent,
-        prefetch_factor=prefetch,
+
+    # Weighted sampler: oversample patches that contain cracks.
+    # Only activate when the dataset actually loaded non-uniform weights from
+    # metadata.json — if metadata is missing, _sample_weights is None and
+    # get_sample_weights() returns all-ones, in which case WeightedRandomSampler
+    # with replacement=True would silently skip a fraction of patches each epoch.
+    _use_weighted_sampler = (
+        ds_cfg.get("oversample_positive", False)
+        and isinstance(train_ds, PrecomputedCrackDataset)
+        and train_ds._sample_weights is not None   # non-uniform weights available
     )
+    if _use_weighted_sampler:
+        sample_weights = train_ds.get_sample_weights()
+        sampler = WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(sample_weights),
+            replacement=True,
+        )
+        train_loader = DataLoader(
+            train_ds,
+            batch_size=cfg["training"]["batch_size"],
+            sampler=sampler,               # mutually exclusive with shuffle=True
+            num_workers=ds_cfg["num_workers"],
+            pin_memory=ds_cfg["pin_memory"],
+            persistent_workers=persistent,
+            prefetch_factor=prefetch,
+        )
+        print("[train] WeightedRandomSampler enabled for positive patch oversampling")
+    else:
+        train_loader = DataLoader(
+            train_ds,
+            batch_size=cfg["training"]["batch_size"],
+            shuffle=True,
+            num_workers=ds_cfg["num_workers"],
+            pin_memory=ds_cfg["pin_memory"],
+            persistent_workers=persistent,
+            prefetch_factor=prefetch,
+        )
     val_loader = DataLoader(
         val_ds,
         batch_size=cfg["training"]["batch_size"],
@@ -196,11 +227,27 @@ def train(cfg: dict) -> None:
     model = build_model(cfg["model"]).to(device)
 
     loss_cfg = cfg["loss"]
-    criterion = BCEDiceLoss(
-        bce_weight=loss_cfg["bce_weight"],
-        dice_weight=loss_cfg["dice_weight"],
-        pos_weight=loss_cfg.get("pos_weight", None),
-    )
+    loss_type = loss_cfg.get("type", "bce_dice")
+    if loss_type == "focal_tversky":
+        from models.losses import FocalTverskyLoss
+        criterion = FocalTverskyLoss(
+            alpha=loss_cfg.get("alpha", 0.3),
+            beta=loss_cfg.get("beta", 0.7),
+            gamma=loss_cfg.get("gamma", 0.75),
+        )
+    elif loss_type == "focal_dice":
+        from models.losses import FocalDiceLoss
+        criterion = FocalDiceLoss(
+            gamma=loss_cfg.get("gamma", 2.0),
+            alpha=loss_cfg.get("alpha", 0.25),
+            dice_weight=loss_cfg.get("dice_weight", 0.5),
+        )
+    else:
+        criterion = BCEDiceLoss(
+            bce_weight=loss_cfg.get("bce_weight", 0.5),
+            dice_weight=loss_cfg.get("dice_weight", 0.5),
+            pos_weight=loss_cfg.get("pos_weight", None),
+        )
 
     tr_cfg = cfg["training"]
     optimizer = torch.optim.AdamW(

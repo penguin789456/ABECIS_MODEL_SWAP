@@ -22,9 +22,8 @@ training:
 
 loss:
   type: bce_dice
-  bce_weight: 0.4
-  dice_weight: 0.6
-  pos_weight: 1.5
+  bce_weight: 0.5
+  dice_weight: 0.5
 
 dataset:
   root: concreteCrackSegmentationDataset
@@ -36,6 +35,8 @@ dataset:
   prefetch_factor: 4
   pin_memory: true
   persistent_workers: true
+  oversample_positive: true       # oversample patches containing cracks
+  positive_weight: 5.0            # crack patches are 5x more likely to be sampled
 
 checkpoint:
   save_dir: outputs/checkpoints/ppliteseg
@@ -44,6 +45,6 @@ checkpoint:
 
 evaluation:
   metrics: [iou, dice, precision, recall]
-  threshold: 0.4
+  threshold: 0.6   # tuned via threshold_sweep.py on FocalDice best.pth
   save_predictions: true
   predictions_dir: outputs/predictions/ppliteseg

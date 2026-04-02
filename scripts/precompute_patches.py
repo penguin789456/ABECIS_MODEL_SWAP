@@ -68,14 +68,18 @@ def precompute(
         manifest_path = out_split / "manifest.json"
         manifest = _make_manifest(split_file, patch_size, overlap)
 
-        # Validate cache: skip if up-to-date, rebuild if stale
-        if manifest_path.exists():
+        # Validate cache: skip if up-to-date, rebuild if stale or metadata missing
+        metadata_path = out_split / "metadata.json"
+        if manifest_path.exists() and metadata_path.exists():
             old = json.loads(manifest_path.read_text(encoding="utf-8"))
             if old == manifest:
                 print(f"  [{split}] cache up-to-date, skipping")
                 continue
             shutil.rmtree(out_split)
             print(f"  [{split}] config changed, rebuilding cache")
+        elif manifest_path.exists() and not metadata_path.exists():
+            shutil.rmtree(out_split)
+            print(f"  [{split}] metadata.json missing, rebuilding cache")
 
         rgb_out = out_split / "rgb"
         mask_out = out_split / "mask"
@@ -83,6 +87,7 @@ def precompute(
         mask_out.mkdir(parents=True, exist_ok=True)
 
         total = 0
+        metadata: dict[str, float] = {}  # patch_stem → crack_ratio
         for stem in tqdm(stems, desc=f"{split:5s}"):
             rgb_p = rgb_index.get(stem.lower())
             bw_p = bw_dir / f"{stem}.jpg"
@@ -124,7 +129,17 @@ def precompute(
                     name = f"{stem}_{y:04d}_{x:04d}.npy"
                     np.save(rgb_out / name, img_p)
                     np.save(mask_out / name, msk_p)
+
+                    # Record crack pixel ratio for weighted sampling
+                    crack_ratio = float(msk_p.sum()) / float(msk_p.size)
+                    patch_key = name[:-4]  # strip .npy
+                    metadata[patch_key] = crack_ratio
+
                     total += 1
+
+        # Write metadata (crack_ratio per patch) — used by WeightedRandomSampler
+        metadata_path = out_split / "metadata.json"
+        metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
         # Write manifest last — guarantees cache is only marked valid when complete
         manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
