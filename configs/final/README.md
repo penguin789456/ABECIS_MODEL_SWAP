@@ -19,7 +19,7 @@
 |------|------|------|---------|-----------|------------|
 | `ppliteseg.yaml` | PP-LiteSeg-T | ✅ 完成 | **0.3769** | **0.65** | `20260402_141530/best.pth` |
 | `deeplabv3plus.yaml` | DeepLabV3+ | 🔄 訓練中 | — | — | — |
-| `pidnet.yaml` | PIDNet-S | ⏳ 待訓練 | — | — | — |
+| `ddrnet.yaml` | DDRNet-23-slim | ⏳ 待訓練 | — | — | — |
 | `maskrcnn.yaml` | Mask R-CNN | ⏳ 待訓練（CrackPre） | — | — | — |
 
 ---

@@ -25,7 +25,16 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 # Allow imports from project root
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+# Add zh320 repo to sys.path at module level so DataLoader worker subprocesses
+# (which re-import this module via multiprocessing spawn) can also find it.
+# Append AFTER project root so local models/ (losses.py etc.) still takes priority.
+_ZH320_ROOT = _PROJECT_ROOT / "realtime-semantic-segmentation-pytorch"
+if _ZH320_ROOT.exists() and str(_ZH320_ROOT) not in sys.path:
+    sys.path.append(str(_ZH320_ROOT))
 
 from data.dataset import CrackDataset, PrecomputedCrackDataset
 from data.transforms import get_train_transforms, get_val_transforms
@@ -69,47 +78,42 @@ def build_model(model_cfg: dict) -> torch.nn.Module:
             encoder_type=model_cfg.get("backbone", "STDC1").lower(),
         )
 
-    if name == "pidnet":
-        import importlib, importlib.util
+    if name in ("pidnet", "ddrnet"):
+        import importlib
         zh320_root = (Path(__file__).resolve().parent.parent / "realtime-semantic-segmentation-pytorch")
         if not zh320_root.exists():
             raise FileNotFoundError(
-                "PIDNet requires zh320 repo. "
+                "DDRNet requires zh320 repo. "
                 "Run: git clone https://github.com/zh320/realtime-semantic-segmentation-pytorch"
             )
 
-        # Ensure zh320 is first in sys.path so its internal imports resolve correctly
-        if str(zh320_root) not in sys.path:
-            sys.path.insert(0, str(zh320_root))
+        # zh320 models use relative imports (from .modules import ...) so they need the
+        # full package context. Strategy:
+        #   1. Temporarily move zh320_root to sys.path[0] (before project root)
+        #   2. Remove local 'models' from sys.modules cache
+        #   3. Import → zh320's models/ package is found
+        #   4. Restore sys.path and sys.modules
+        zh320_str = str(zh320_root)
+        _path_backup = sys.path[:]
+        if zh320_str in sys.path:
+            sys.path.remove(zh320_str)
+        sys.path.insert(0, zh320_str)
         importlib.invalidate_caches()
 
-        # Locate pidnet.py by file path to bypass local 'models' namespace conflict
-        pidnet_path = zh320_root / "models" / "pidnet.py"
-        if not pidnet_path.exists():
-            available = sorted(p.name for p in (zh320_root / "models").glob("*.py"))
-            raise FileNotFoundError(
-                f"pidnet.py not found in zh320 repo.\n"
-                f"Available model files: {available}\n"
-                f"Searched: {pidnet_path}"
-            )
-
-        # Clear local 'models' from cache so zh320's models resolve for pidnet's imports
         _saved = {k: v for k, v in list(sys.modules.items())
                   if k == "models" or k.startswith("models.")}
         for k in _saved:
             del sys.modules[k]
         try:
-            spec = importlib.util.spec_from_file_location("_zh320_pidnet", str(pidnet_path))
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            PIDNet = mod.PIDNet
+            from models.ddrnet import DDRNet  # type: ignore[import]
         finally:
+            # Restore sys.path and local models cache
+            sys.path[:] = _path_backup
             sys.modules.update(_saved)
 
-        return PIDNet(
-            num_classes=1,
-            variant=model_cfg.get("variant", "pidnet_s"),
-        )
+        # DDRNet-23-slim: 5.6M params, dual-branch real-time segmentation
+        arch_type = model_cfg.get("arch_type", "DDRNet-23-slim")
+        return DDRNet(num_class=1, arch_type=arch_type)
 
     raise ValueError(f"Unknown model name: {name!r}. Choose from deeplabv3plus / ppliteseg / pidnet")
 

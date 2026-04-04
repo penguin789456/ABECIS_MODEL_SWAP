@@ -32,8 +32,8 @@ if %errorlevel% neq 0 ( echo ERROR: DeepLabV3+ inference failed. & pause & exit 
 python evaluation/inference_crackseg.py --config configs/final/ppliteseg.yaml
 if %errorlevel% neq 0 ( echo ERROR: PP-LiteSeg inference failed. & pause & exit /b %errorlevel% )
 
-python evaluation/inference_crackseg.py --config configs/final/pidnet.yaml
-if %errorlevel% neq 0 ( echo ERROR: PIDNet inference failed. & pause & exit /b %errorlevel% )
+python evaluation/inference_crackseg.py --config configs/final/ddrnet.yaml
+if %errorlevel% neq 0 ( echo ERROR: DDRNet inference failed. & pause & exit /b %errorlevel% )
 
 echo.
 echo ============================================================

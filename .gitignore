@@ -226,6 +226,9 @@ outputs/
 # Third-party cloned repos
 realtime-semantic-segmentation-pytorch/
 
+# Packaged tarballs for Colab upload
+*.tar.gz
+
 # Thesis documents
 論文修改完成.docx
 論文修改完成_v2.docx

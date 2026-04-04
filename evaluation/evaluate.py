@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from evaluation.metrics import compute_metrics, compute_metrics_2d
 from evaluation.postprocess import postprocess_mask
 
-MODELS = ["deeplabv3plus", "ppliteseg", "pidnet", "maskrcnn"]
+MODELS = ["deeplabv3plus", "ppliteseg", "ddrnet", "maskrcnn"]
 
 
 def evaluate_model(
