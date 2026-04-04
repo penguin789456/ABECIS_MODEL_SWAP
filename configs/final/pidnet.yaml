@@ -1,0 +1,73 @@
+# ============================================================
+# PIDNet-S — FINALIZED CONFIG
+# ============================================================
+# Status      : 待訓練
+# Date        : —
+# Checkpoint  : outputs/checkpoints/pidnet/<timestamp>/best.pth
+# Epochs      : — / 150
+#
+# --- Val Metrics (threshold=待sweep) ---
+# IoU         : 待填
+# Dice        : 待填
+# Precision   : 待填
+# Recall      : 待填
+# clDice      : 待填
+#
+# --- Efficiency ---
+# FPS         : 待測
+# Latency(ms) : 待測
+# Params      : ~7M
+# Model Size  : 待測 MB
+#
+# --- Notes ---
+#   - PIDNet-S (Small variant), 3-branch architecture for boundary detail
+#   - Same BCEDice + oversampling as PP-LiteSeg for fair comparison
+#   - epochs 改為 150 對齊其他模型（原 configs/pidnet.yaml 為 100）
+#   - Run threshold_sweep.py after training
+# ============================================================
+
+model:
+  name: pidnet
+  variant: pidnet_s
+  pretrained: true
+  num_classes: 1
+
+training:
+  optimizer: adamw
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  batch_size: 32
+  epochs: 150
+  warmup_epochs: 5
+  scheduler: cosine
+  seed: 42
+  output_dir: outputs
+
+loss:
+  type: bce_dice
+  bce_weight: 0.5
+  dice_weight: 0.5
+
+dataset:
+  root: concreteCrackSegmentationDataset
+  splits_dir: data/splits
+  patch_size: 512
+  overlap: 128
+  num_workers: 4
+  prefetch_factor: 4
+  pin_memory: true
+  persistent_workers: true
+  precomputed_dir: data/patches
+  oversample_positive: true
+  positive_weight: 5.0
+
+checkpoint:
+  save_dir: outputs/checkpoints/pidnet
+  save_best_metric: iou
+  save_every_n_epochs: 10
+
+evaluation:
+  metrics: [iou, dice, precision, recall, cldice]
+  threshold: 0.5   # update after threshold_sweep.py
+  save_predictions: true
+  predictions_dir: outputs/predictions/pidnet

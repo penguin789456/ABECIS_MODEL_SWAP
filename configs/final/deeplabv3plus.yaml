@@ -1,0 +1,73 @@
+# ============================================================
+# DeepLabV3+ (ResNet-101) — FINALIZED CONFIG
+# ============================================================
+# Status      : 訓練中 (started 2026-04-04)
+# Date        : —
+# Checkpoint  : outputs/checkpoints/deeplabv3plus/<timestamp>/best.pth
+# Epochs      : — / 150
+#
+# --- Val Metrics (threshold=待sweep) ---
+# IoU         : 待填
+# Dice        : 待填
+# Precision   : 待填
+# Recall      : 待填
+# clDice      : 待填
+#
+# --- Efficiency ---
+# FPS         : 待測
+# Latency(ms) : 待測
+# Params      : ~59M  (ResNet-101 backbone)
+# Model Size  : 待測 MB
+#
+# --- Notes ---
+#   - Batch size 8 (11.3GB VRAM on RTX 5060 Ti)
+#   - Same BCEDice + oversampling as PP-LiteSeg for fair comparison
+#   - Run threshold_sweep.py after training to confirm optimal threshold
+# ============================================================
+
+model:
+  name: deeplabv3plus
+  backbone: resnet101
+  pretrained: true
+  num_classes: 1
+  output_stride: 8
+
+training:
+  optimizer: adamw
+  lr: 2.0e-4
+  weight_decay: 1.0e-4
+  batch_size: 8
+  epochs: 150
+  warmup_epochs: 5
+  scheduler: cosine
+  seed: 42
+  output_dir: outputs
+
+loss:
+  type: bce_dice
+  bce_weight: 0.5
+  dice_weight: 0.5
+
+dataset:
+  root: concreteCrackSegmentationDataset
+  splits_dir: data/splits
+  patch_size: 512
+  overlap: 128
+  num_workers: 4
+  prefetch_factor: 4
+  pin_memory: true
+  persistent_workers: true
+  precomputed_dir: data/patches
+  oversample_positive: true
+  positive_weight: 5.0
+
+checkpoint:
+  save_dir: outputs/checkpoints/deeplabv3plus
+  save_best_metric: iou
+  save_every_n_epochs: 10
+
+evaluation:
+  metrics: [iou, dice, precision, recall, cldice]
+  threshold: 0.5   # update after threshold_sweep.py
+  save_predictions: true
+  predictions_dir: outputs/predictions/deeplabv3plus

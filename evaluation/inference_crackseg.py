@@ -106,6 +106,8 @@ def run_inference(cfg: dict) -> None:
 
     out_dir = Path(cfg["evaluation"]["predictions_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
+    threshold = cfg.get("evaluation", {}).get("threshold", 0.5)
+    print(f"Inference threshold: {threshold}")
 
     for stem in tqdm(stems, desc="Inference"):
         rgb_p = rgb_index.get(stem.lower())
@@ -117,6 +119,7 @@ def run_inference(cfg: dict) -> None:
             image, model, device, transform,
             patch_size=ds_cfg["patch_size"],
             overlap=ds_cfg["overlap"],
+            threshold=threshold,
         )
         Image.fromarray(mask).save(out_dir / f"{stem}.png")
 

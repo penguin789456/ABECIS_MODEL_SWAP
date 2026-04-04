@@ -12,8 +12,8 @@ training:
   optimizer: adamw
   lr: 2.0e-4
   weight_decay: 1.0e-4
-  batch_size: 32
-  epochs: 100
+  batch_size: 8    # DeepLabV3+ (59M params) needs smaller batch than PP-LiteSeg; reduce to 4 if CUDA OOM
+  epochs: 150
   warmup_epochs: 5
   scheduler: cosine
   seed: 42
@@ -21,8 +21,8 @@ training:
 
 loss:
   type: bce_dice
-  bce_weight: 0.3
-  dice_weight: 0.7
+  bce_weight: 0.5
+  dice_weight: 0.5
 
 dataset:
   root: concreteCrackSegmentationDataset
@@ -34,6 +34,8 @@ dataset:
   pin_memory: true
   persistent_workers: true
   precomputed_dir: data/patches
+  oversample_positive: true   # positive patch oversampling — proven effective on PP-LiteSeg (+0.027 IoU)
+  positive_weight: 5.0
 
 checkpoint:
   save_dir: outputs/checkpoints/deeplabv3plus
@@ -42,5 +44,6 @@ checkpoint:
 
 evaluation:
   metrics: [iou, dice, precision, recall]
+  threshold: 0.5   # run threshold_sweep.py after training to confirm optimal value
   save_predictions: true
   predictions_dir: outputs/predictions/deeplabv3plus
