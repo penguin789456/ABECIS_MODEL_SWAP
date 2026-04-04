@@ -54,6 +54,7 @@ def build_model(model_cfg: dict) -> torch.nn.Module:
                 "Run: git clone https://github.com/zh320/realtime-semantic-segmentation-pytorch"
             )
         sys.path.insert(0, str(zh320_root))
+        import importlib; importlib.invalidate_caches()
         # Temporarily hide the local 'models' package so Python finds zh320's instead
         _saved = {k: v for k, v in list(sys.modules.items())
                   if k == "models" or k.startswith("models.")}
@@ -76,6 +77,7 @@ def build_model(model_cfg: dict) -> torch.nn.Module:
                 "Run: git clone https://github.com/zh320/realtime-semantic-segmentation-pytorch"
             )
         sys.path.insert(0, str(zh320_root))
+        import importlib; importlib.invalidate_caches()
         _saved = {k: v for k, v in list(sys.modules.items())
                   if k == "models" or k.startswith("models.")}
         for k in _saved:

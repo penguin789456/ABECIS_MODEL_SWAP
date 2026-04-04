@@ -38,6 +38,7 @@ def build_model(model_cfg: dict) -> torch.nn.Module:
         zh320_root = (Path(__file__).resolve().parent.parent
                       / "realtime-semantic-segmentation-pytorch")
         sys.path.insert(0, str(zh320_root))
+        import importlib; importlib.invalidate_caches()
         _saved = {k: v for k, v in list(sys.modules.items())
                   if k == "models" or k.startswith("models.")}
         for k in _saved:
@@ -52,6 +53,7 @@ def build_model(model_cfg: dict) -> torch.nn.Module:
         zh320_root = (Path(__file__).resolve().parent.parent
                       / "realtime-semantic-segmentation-pytorch")
         sys.path.insert(0, str(zh320_root))
+        import importlib; importlib.invalidate_caches()
         _saved = {k: v for k, v in list(sys.modules.items())
                   if k == "models" or k.startswith("models.")}
         for k in _saved:
