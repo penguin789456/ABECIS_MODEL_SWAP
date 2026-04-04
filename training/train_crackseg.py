@@ -70,22 +70,42 @@ def build_model(model_cfg: dict) -> torch.nn.Module:
         )
 
     if name == "pidnet":
+        import importlib, importlib.util
         zh320_root = (Path(__file__).resolve().parent.parent / "realtime-semantic-segmentation-pytorch")
         if not zh320_root.exists():
             raise FileNotFoundError(
                 "PIDNet requires zh320 repo. "
                 "Run: git clone https://github.com/zh320/realtime-semantic-segmentation-pytorch"
             )
-        sys.path.insert(0, str(zh320_root))
-        import importlib; importlib.invalidate_caches()
+
+        # Ensure zh320 is first in sys.path so its internal imports resolve correctly
+        if str(zh320_root) not in sys.path:
+            sys.path.insert(0, str(zh320_root))
+        importlib.invalidate_caches()
+
+        # Locate pidnet.py by file path to bypass local 'models' namespace conflict
+        pidnet_path = zh320_root / "models" / "pidnet.py"
+        if not pidnet_path.exists():
+            available = sorted(p.name for p in (zh320_root / "models").glob("*.py"))
+            raise FileNotFoundError(
+                f"pidnet.py not found in zh320 repo.\n"
+                f"Available model files: {available}\n"
+                f"Searched: {pidnet_path}"
+            )
+
+        # Clear local 'models' from cache so zh320's models resolve for pidnet's imports
         _saved = {k: v for k, v in list(sys.modules.items())
                   if k == "models" or k.startswith("models.")}
         for k in _saved:
             del sys.modules[k]
         try:
-            from models.pidnet import PIDNet  # type: ignore[import]
+            spec = importlib.util.spec_from_file_location("_zh320_pidnet", str(pidnet_path))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            PIDNet = mod.PIDNet
         finally:
             sys.modules.update(_saved)
+
         return PIDNet(
             num_classes=1,
             variant=model_cfg.get("variant", "pidnet_s"),
