@@ -3,7 +3,7 @@ Unified training script for DeepLabV3+, PP-LiteSeg, and PIDNet.
 
 Usage:
     conda activate CrackSeg
-    python training/train_crackseg.py --config configs/deeplabv3plus.yaml
+    python training/train_crackseg.py --config configs/deeplabv3_mobilenet.yaml
     python training/train_crackseg.py --config configs/ppliteseg.yaml
     python training/train_crackseg.py --config configs/pidnet.yaml
 """
@@ -50,9 +50,12 @@ from training.lr_scheduler import build_scheduler
 def build_model(model_cfg: dict) -> torch.nn.Module:
     name = model_cfg["name"].lower()
 
-    if name == "deeplabv3plus":
-        from models.deeplabv3plus import DeepLabV3Plus
-        return DeepLabV3Plus(pretrained=model_cfg.get("pretrained", True))
+    if name == "deeplabv3_mobilenet":
+        from models.deeplabv3_mobilenet import DeepLabV3Mobilenet
+        return DeepLabV3Mobilenet(
+            pretrained=model_cfg.get("pretrained", True),
+            backbone=model_cfg.get("backbone", "mobilenet_v3_large"),
+        )
 
     if name == "ppliteseg":
         # Requires the zh320 repo to be cloned at project root
@@ -115,7 +118,7 @@ def build_model(model_cfg: dict) -> torch.nn.Module:
         arch_type = model_cfg.get("arch_type", "DDRNet-23-slim")
         return DDRNet(num_class=1, arch_type=arch_type)
 
-    raise ValueError(f"Unknown model name: {name!r}. Choose from deeplabv3plus / ppliteseg / pidnet")
+    raise ValueError(f"Unknown model name: {name!r}. Choose from deeplabv3_mobilenet / ppliteseg / pidnet")
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +202,7 @@ def train(cfg: dict) -> None:
         )
 
     persistent = ds_cfg.get("persistent_workers", False) and ds_cfg["num_workers"] > 0
-    prefetch = ds_cfg.get("prefetch_factor", 2)
+    prefetch = ds_cfg.get("prefetch_factor", 2) if ds_cfg["num_workers"] > 0 else None
 
     # Weighted sampler: oversample patches that contain cracks.
     # Only activate when the dataset actually loaded non-uniform weights from

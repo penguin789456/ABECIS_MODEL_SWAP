@@ -54,10 +54,10 @@ dataset:
   splits_dir: data/splits
   patch_size: 512
   overlap: 128
-  num_workers: 4
-  prefetch_factor: 4
-  pin_memory: true
-  persistent_workers: true
+  num_workers: 0      # Windows: single-process fastest (285 img/s vs 224 @ workers=4)
+  prefetch_factor: 2  # ignored when num_workers=0
+  pin_memory: false   # must be false when num_workers=0
+  persistent_workers: false
   precomputed_dir: data/patches
   oversample_positive: true
   positive_weight: 5.0

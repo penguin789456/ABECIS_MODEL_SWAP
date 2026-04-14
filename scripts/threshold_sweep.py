@@ -30,9 +30,9 @@ from data.transforms import get_val_transforms
 def build_model(model_cfg: dict) -> torch.nn.Module:
     name = model_cfg["name"].lower()
 
-    if name == "deeplabv3plus":
-        from models.deeplabv3plus import DeepLabV3Plus
-        return DeepLabV3Plus(pretrained=False)
+    if name == "deeplabv3_mobilenet":
+        from models.deeplabv3_mobilenet import DeepLabV3Mobilenet
+        return DeepLabV3Mobilenet(pretrained=False)
 
     if name == "ppliteseg":
         zh320_root = (Path(__file__).resolve().parent.parent

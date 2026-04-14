@@ -11,7 +11,7 @@ echo.
 echo ============================================================
 echo  Training DeepLabV3+
 echo ============================================================
-python training/train_crackseg.py --config configs/deeplabv3plus.yaml
+python training/train_crackseg.py --config configs/deeplabv3_mobilenet.yaml
 if %errorlevel% neq 0 (
     echo ERROR: DeepLabV3+ training failed.
     pause

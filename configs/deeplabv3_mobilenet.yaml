@@ -1,18 +1,17 @@
-# DeepLabV3+ — semantic segmentation baseline
+# DeepLabV3 (MobileNetV3-Large) — semantic segmentation baseline
 # Inherits defaults from base.yaml; only overrides are listed here
 
 model:
-  name: deeplabv3plus
-  backbone: resnet101
+  name: deeplabv3_mobilenet
+  backbone: mobilenet_v3_large   # ~11M params — change to resnet50/resnet101 if needed
   pretrained: true
-  num_classes: 1          # binary segmentation
-  output_stride: 8
+  num_classes: 1                 # binary segmentation
 
 training:
   optimizer: adamw
   lr: 2.0e-4
   weight_decay: 1.0e-4
-  batch_size: 8    # DeepLabV3+ (59M params) needs smaller batch than PP-LiteSeg; reduce to 4 if CUDA OOM
+  batch_size: 32   # MobileNetV3 (11M params) fits batch=32 comfortably on RTX 5060 Ti
   epochs: 150
   warmup_epochs: 5
   scheduler: cosine
@@ -29,16 +28,16 @@ dataset:
   splits_dir: data/splits
   patch_size: 512
   overlap: 128
-  num_workers: 4
-  prefetch_factor: 4
-  pin_memory: true
-  persistent_workers: true
+  num_workers: 0
+  prefetch_factor: 2
+  pin_memory: false
+  persistent_workers: false
   precomputed_dir: data/patches
-  oversample_positive: true   # positive patch oversampling — proven effective on PP-LiteSeg (+0.027 IoU)
+  oversample_positive: true   # positive patch oversampling — proven effective (+0.027 IoU)
   positive_weight: 5.0
 
 checkpoint:
-  save_dir: outputs/checkpoints/deeplabv3plus
+  save_dir: outputs/checkpoints/deeplabv3_mobilenet
   save_best_metric: iou
   save_every_n_epochs: 10
 
@@ -46,4 +45,4 @@ evaluation:
   metrics: [iou, dice, precision, recall]
   threshold: 0.5   # run threshold_sweep.py after training to confirm optimal value
   save_predictions: true
-  predictions_dir: outputs/predictions/deeplabv3plus
+  predictions_dir: outputs/predictions/deeplabv3_mobilenet

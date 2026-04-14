@@ -5,7 +5,7 @@ Runs full-image patch inference with overlap averaging (stitching), then
 saves one binary PNG mask per test image to outputs/predictions/<model>/.
 
 Usage (inside CrackSeg conda env):
-    python evaluation/inference_crackseg.py --config configs/deeplabv3plus.yaml
+    python evaluation/inference_crackseg.py --config configs/deeplabv3_mobilenet.yaml
     python evaluation/inference_crackseg.py --config configs/ppliteseg.yaml
     python evaluation/inference_crackseg.py --config configs/pidnet.yaml
 """

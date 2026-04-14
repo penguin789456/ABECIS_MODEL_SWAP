@@ -26,7 +26,7 @@ echo  [CrackSeg] Semantic segmentation inference (final thresholds)
 echo ============================================================
 call conda activate CrackSeg
 
-python evaluation/inference_crackseg.py --config configs/final/deeplabv3plus.yaml
+python evaluation/inference_crackseg.py --config configs/final/deeplabv3_mobilenet.yaml
 if %errorlevel% neq 0 ( echo ERROR: DeepLabV3+ inference failed. & pause & exit /b %errorlevel% )
 
 python evaluation/inference_crackseg.py --config configs/final/ppliteseg.yaml

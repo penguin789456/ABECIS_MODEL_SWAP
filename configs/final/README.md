@@ -18,7 +18,7 @@
 | 檔案 | 模型 | 狀態 | Best IoU | Threshold | Checkpoint |
 |------|------|------|---------|-----------|------------|
 | `ppliteseg.yaml` | PP-LiteSeg-T | ✅ 完成 | **0.3769** | **0.65** | `20260402_141530/best.pth` |
-| `deeplabv3plus.yaml` | DeepLabV3+ | 🔄 訓練中 | — | — | — |
+| `deeplabv3_mobilenet.yaml` | DeepLabV3-MobileNetV3 | 🔄 訓練中 | — | — | — |
 | `ddrnet.yaml` | DDRNet-23-slim | ⏳ 待訓練 | — | — | — |
 | `maskrcnn.yaml` | Mask R-CNN | ⏳ 待訓練（CrackPre） | — | — | — |
 
