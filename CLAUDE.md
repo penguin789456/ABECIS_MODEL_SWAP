@@ -11,33 +11,42 @@
 
 ## 架構概覽
 ```
-data/dataset.py          ← CrackDataset（512×512 patch, LRU cache, .jpg/.JPG fix）
-data/transforms.py       ← Albumentations train/val/test pipelines
-data/split.py            ← 70/15/15 split generator（seed=42）
-configs/                 ← base.yaml + 4 model overrides
+data/dataset.py              ← CrackDataset（512×512 patch, LRU cache, .jpg/.JPG fix）
+data/dataset_instance.py     ← CrackInstanceDataset（全圖，連通域→實例，Mask R-CNN 用）
+data/transforms.py           ← Albumentations train/val/test pipelines
+data/split.py                ← 70/15/15 split generator（seed=42）
+configs/                     ← base.yaml + 4 model overrides
+configs/maskrcnn_tv.yaml     ← torchvision Mask R-CNN config（CrackSeg env）
 models/deeplabv3_mobilenet.py  ← torchvision wrapper, binary output
-models/losses.py         ← BCEDiceLoss（weighted BCE + soft Dice）
-training/train_crackseg.py      ← unified trainer（DeepLabV3-MobileNetV3/PP-LiteSeg/PIDNet）
-training/train_maskrcnn.py      ← Detectron2 DefaultTrainer subclass
+models/losses.py             ← BCEDiceLoss（weighted BCE + soft Dice）
+training/train_crackseg.py      ← unified trainer（DeepLabV3-MobileNetV3/PP-LiteSeg/DDRNet）
+training/train_maskrcnn_tv.py   ← torchvision Mask R-CNN trainer（CrackSeg env）
+training/train_maskrcnn.py      ← [備用] Detectron2 DefaultTrainer（需 MSVC cl.exe）
 training/lr_scheduler.py        ← warmup(5ep) + CosineAnnealingLR
 evaluation/metrics.py           ← IoU, Dice, Precision, Recall
 evaluation/postprocess.py       ← skeletonize, crack_length, continuity_score
-evaluation/inference_crackseg.py ← CrackSeg env → PNG masks
-evaluation/inference_maskrcnn.py ← CrackPre env → PNG masks
+evaluation/inference_crackseg.py  ← CrackSeg env → PNG masks（語意分割）
+evaluation/inference_maskrcnn_tv.py ← CrackSeg env → PNG masks（torchvision Mask R-CNN）
+evaluation/inference_maskrcnn.py  ← [備用] CrackPre env + Detectron2
 evaluation/evaluate.py          ← env-agnostic evaluator → metrics_summary.csv
 scripts/prepare_dataset.py      ← 第一步執行：validate + splits + COCO JSON
-scripts/run_eval_all.bat        ← 兩個 env 推論 + 評估
+scripts/run_eval_all.bat        ← 單一 CrackSeg env 推論 + 評估
+scripts/run_train_maskrcnn_tv.bat ← Mask R-CNN（torchvision）訓練腳本
 ```
 
-## 雙環境推論流程
+## 推論流程（單一 CrackSeg 環境）
 ```
-CrackPre: inference_maskrcnn.py → outputs/predictions/maskrcnn/
-CrackSeg: inference_crackseg.py → outputs/predictions/{deeplabv3+,ppliteseg,pidnet}/
+CrackSeg: inference_maskrcnn_tv.py  → outputs/predictions/maskrcnn/
+CrackSeg: inference_crackseg.py     → outputs/predictions/{deeplabv3_mobilenet,ppliteseg,ddrnet}/
                     ↓
           evaluate.py（numpy/PIL only）
                     ↓
           outputs/results/metrics_summary.csv
 ```
+
+> **注意**：Mask R-CNN 改用 torchvision 實作，不再需要 CrackPre/Detectron2 環境。
+> Windows 上 detectron2 需要 MSVC cl.exe 編譯 _C 擴展，環境建置困難；
+> torchvision.models.detection.maskrcnn_resnet50_fpn 提供相同架構（44M 參數），可直接在 CrackSeg 環境使用 GPU 訓練。
 
 ## 資料集
 ```
@@ -50,12 +59,14 @@ concreteCrackSegmentationDataset/
 增強（train only）：水平翻轉、垂直翻轉、旋轉 ±45°、亮度/對比、CLAHE、Sharpen、Gaussian Noise/Blur
 
 ## 模型
-| 模型 | 角色 | 來源 |
-|------|------|------|
-| Mask R-CNN R50-FPN | ABECIS 基準 | Detectron2 |
-| DeepLabV3 (MobileNetV3-Large) | 語意分割基準（~11M） | torchvision.models.segmentation |
-| DDRNet-23-slim | 雙分支即時分割（~5.6M） | zh320/realtime-semantic-segmentation-pytorch |
-| PP-LiteSeg-T (STDC1) | 主要輕量模型（~5M） | zh320/realtime-semantic-segmentation-pytorch |
+| 模型 | 角色 | 來源 | 環境 |
+|------|------|------|------|
+| Mask R-CNN R50-FPN | ABECIS 基準（~44M） | torchvision.models.detection | CrackSeg |
+| DeepLabV3 (MobileNetV3-Large) | 語意分割基準（~11M） | torchvision.models.segmentation | CrackSeg |
+| DDRNet-23-slim | 雙分支即時分割（~5.6M） | zh320/realtime-semantic-segmentation-pytorch | CrackSeg |
+| PP-LiteSeg-T (STDC1) | 主要輕量模型（~5M） | zh320/realtime-semantic-segmentation-pytorch | CrackSeg |
+
+> 全部模型統一在 **CrackSeg** 環境訓練與推論，不再需要 CrackPre 環境。
 
 > DDRNet 與 PP-LiteSeg 使用同一 repo，確保訓練框架一致：
 > https://github.com/zh320/realtime-semantic-segmentation-pytorch

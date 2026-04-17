@@ -56,6 +56,14 @@ def evaluate_model(
 
         pred = np.array(Image.open(pred_path).convert("L")) > 127
         gt = np.array(Image.open(gt_path).convert("L")) > 127
+        # Guard against EXIF-rotation mismatch (pred stitched from RGB, GT loaded raw)
+        if pred.shape != gt.shape:
+            if pred.shape == gt.shape[::-1]:
+                pred = pred.T   # transpose to match GT orientation
+            else:
+                pred = np.array(
+                    Image.fromarray(pred).resize((gt.shape[1], gt.shape[0]), Image.NEAREST)
+                )
         all_preds.append(pred.ravel())
         all_gts.append(gt.ravel())
         all_preds_2d.append(pred)

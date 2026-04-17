@@ -11,23 +11,20 @@ REM    - configs/final/*.yaml thresholds updated
 REM ============================================================
 
 echo ============================================================
-echo  [CrackPre] Mask R-CNN inference
+echo  [CrackSeg] Mask R-CNN inference (torchvision)
 echo ============================================================
-call conda activate CrackPre
+call conda activate CrackSeg
 
-python evaluation/inference_maskrcnn.py --config configs/final/maskrcnn.yaml
+python evaluation/inference_maskrcnn_tv.py --config configs/maskrcnn_tv.yaml
 if %errorlevel% neq 0 ( echo ERROR: Mask R-CNN inference failed. & pause & exit /b %errorlevel% )
-
-call conda deactivate
 
 echo.
 echo ============================================================
 echo  [CrackSeg] Semantic segmentation inference (final thresholds)
 echo ============================================================
-call conda activate CrackSeg
 
 python evaluation/inference_crackseg.py --config configs/final/deeplabv3_mobilenet.yaml
-if %errorlevel% neq 0 ( echo ERROR: DeepLabV3+ inference failed. & pause & exit /b %errorlevel% )
+if %errorlevel% neq 0 ( echo ERROR: DeepLabV3-MobileNetV3 inference failed. & pause & exit /b %errorlevel% )
 
 python evaluation/inference_crackseg.py --config configs/final/ppliteseg.yaml
 if %errorlevel% neq 0 ( echo ERROR: PP-LiteSeg inference failed. & pause & exit /b %errorlevel% )
