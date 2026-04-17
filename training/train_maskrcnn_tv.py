@@ -65,7 +65,7 @@ def evaluate_pixel_iou(model, loader, device, threshold: float = 0.5) -> float:
             outputs = model(imgs)
 
             for output, target in zip(outputs, targets):
-                H, W = imgs[0].shape[-2:]
+                # Use GT mask dimensions as canonical size
                 if target["masks"].shape[0] > 0:
                     H, W = target["masks"].shape[-2:]
                 else:
@@ -77,6 +77,13 @@ def evaluate_pixel_iou(model, loader, device, threshold: float = 0.5) -> float:
                     keep = output["scores"] >= threshold
                     if keep.any():
                         pred_masks = output["masks"][keep, 0] > 0.5
+                        # Guard against EXIF shape mismatch between model output and GT
+                        if pred_masks.shape[-2:] != (H, W):
+                            import torch.nn.functional as F
+                            pred_masks = F.interpolate(
+                                pred_masks.float().unsqueeze(1),
+                                size=(H, W), mode="nearest"
+                            ).squeeze(1).bool()
                         pred_mask = pred_masks.any(dim=0)
 
                 # GT semantic mask

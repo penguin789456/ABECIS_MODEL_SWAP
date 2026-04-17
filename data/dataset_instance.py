@@ -72,6 +72,16 @@ class CrackInstanceDataset(Dataset):
         img = Image.open(rgb_path).convert("RGB")
         bw = Image.open(bw_path).convert("L")
 
+        # Guard against EXIF rotation mismatch (RGB and BW may differ in orientation).
+        # PIL.Image.size = (W, H); numpy array shape = (H, W).
+        if img.size != bw.size:
+            if img.size == (bw.height, bw.width):
+                # Dimensions are transposed — rotate BW 90° to match RGB orientation
+                bw_np = np.array(bw)
+                bw = Image.fromarray(np.rot90(bw_np, k=1))   # k=1 → 90° CCW
+            else:
+                bw = bw.resize(img.size, Image.NEAREST)
+
         # Simple augmentation during training
         if self.train:
             if random.random() < 0.5:
