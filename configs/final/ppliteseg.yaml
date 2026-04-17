@@ -11,7 +11,14 @@
 # Dice        : 0.5475
 # Precision   : 0.8463
 # Recall      : 0.4046
-# clDice      : 待測  (run: python scripts/threshold_sweep.py --cldice)
+# clDice      : 0.5146  (test set)
+#
+# --- Test Metrics (threshold=0.65) ---
+# IoU         : 0.4391
+# Dice        : 0.6102
+# Precision   : 0.8247
+# Recall      : 0.4842
+# clDice      : 0.5146
 #
 # --- Efficiency (val set, RTX 5060 Ti) ---
 # FPS         : 待測

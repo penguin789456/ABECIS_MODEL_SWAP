@@ -1,17 +1,17 @@
 # ============================================================
 # DDRNet-23-slim — FINALIZED CONFIG
 # ============================================================
-# Status      : 待訓練
-# Date        : —
+# Status      : DONE
+# Date        : 2026-04-17
 # Checkpoint  : outputs/checkpoints/ddrnet/<timestamp>/best.pth
-# Epochs      : — / 150
+# Epochs      : 150
 #
-# --- Val Metrics (threshold=待sweep) ---
-# IoU         : 待填
-# Dice        : 待填
-# Precision   : 待填
-# Recall      : 待填
-# clDice      : 待填
+# --- Test Metrics (threshold=0.5) ---
+# IoU         : 0.3912
+# Dice        : 0.5624
+# Precision   : 0.7128
+# Recall      : 0.4644
+# clDice      : 0.5152
 #
 # --- Efficiency ---
 # FPS         : 待測
