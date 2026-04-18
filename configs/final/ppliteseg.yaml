@@ -1,22 +1,37 @@
 # ============================================================
 # PP-LiteSeg-T (STDC1) — FINALIZED CONFIG
 # ============================================================
-# Status   : DONE
-# Best IoU : 0.3755  (val, pixel-level)
-# Precision: 0.8116
-# Recall   : 0.4114
-# Dice     : 0.5460
-# Threshold: 0.60  (confirmed via threshold_sweep.py)
-# Checkpoint: outputs/checkpoints/ppliteseg/20260402_141530/best.pth
-# Epochs   : 146 / 150 (early-stop not triggered; cosine decay reached near-zero LR)
-# Date     : 2026-04-02
+# Status      : DONE
+# Date        : 2026-04-02
+# Checkpoint  : outputs/checkpoints/ppliteseg/20260402_141530/best.pth
+# Epochs      : 146 / 150  (cosine decay reached LR=1e-6)
 #
-# Key findings:
-#   - BCEDice with positive patch oversampling (weight=5x) is the stable setting
-#   - FN-penalty losses (pos_weight, FocalTversky) all caused degenerate all-positive collapse
-#   - FocalDice gave no recall improvement
-#   - Oversampling + augmentation: +0.027 IoU over baseline (0.35 -> 0.3755)
-#   - Recall ceiling ~0.41 under current data distribution
+# --- Val Metrics (threshold=0.65) ---
+# IoU         : 0.3769
+# Dice        : 0.5475
+# Precision   : 0.8463
+# Recall      : 0.4046
+# clDice      : 0.5146  (test set)
+#
+# --- Test Metrics (threshold=0.65) ---
+# IoU         : 0.4391
+# Dice        : 0.6102
+# Precision   : 0.8247
+# Recall      : 0.4842
+# clDice      : 0.5146
+#
+# --- Efficiency (val set, RTX 5060 Ti) ---
+# FPS         : 待測
+# Latency(ms) : 待測
+# Params      : ~5M
+# Model Size  : 待測 MB
+#
+# --- Key findings ---
+#   - BCEDice + positive patch oversampling (5x) is the stable setting
+#   - FN-penalty losses (pos_weight, FocalTversky, FocalDice) → degenerate all-positive collapse
+#   - Oversampling: +0.027 IoU over baseline (0.35 → 0.3755 → 0.3769 after threshold tune)
+#   - Recall ceiling ~0.41: data-inherent (72.5% zero-crack patches, mean crack 1.36%)
+#   - Threshold cliff at 0.52; plateau 0.58-0.68 (delta <0.003); best t=0.65
 # ============================================================
 
 model:
@@ -61,7 +76,7 @@ checkpoint:
   save_every_n_epochs: 10
 
 evaluation:
-  metrics: [iou, dice, precision, recall]
-  threshold: 0.60
+  metrics: [iou, dice, precision, recall, cldice]
+  threshold: 0.65
   save_predictions: true
   predictions_dir: outputs/predictions/ppliteseg

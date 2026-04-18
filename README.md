@@ -2,12 +2,12 @@
 
 Comparative study of four deep learning segmentation models on a custom concrete crack dataset, as part of a Master's thesis.
 
-| Model | Role | Environment |
-|-------|------|-------------|
-| Mask R-CNN R50-FPN | Instance segmentation baseline | CrackPre (Detectron2) |
-| DeepLabV3+ | Semantic segmentation baseline | CrackSeg |
-| PP-LiteSeg-T (STDC1) | Primary lightweight model | CrackSeg |
-| PIDNet-S | Real-time comparison model | CrackSeg |
+| Model | Role | Params | Environment |
+|-------|------|--------|-------------|
+| Mask R-CNN R50-FPN | Instance segmentation baseline (ABECIS) | 44M | CrackPre (Detectron2) |
+| DeepLabV3 (MobileNetV3-Large) | Semantic segmentation baseline | 11M | CrackSeg |
+| DDRNet-23-slim | Dual-branch real-time model | 5.6M | CrackSeg |
+| PP-LiteSeg-T (STDC1) | Primary lightweight model | 5M | CrackSeg |
 
 ---
 
@@ -42,7 +42,7 @@ This will:
 
 ## Environment Setup
 
-### CrackSeg — DeepLabV3+, PP-LiteSeg, PIDNet
+### CrackSeg — DeepLabV3 (MobileNetV3), DDRNet, PP-LiteSeg
 
 ```bash
 conda env create -f CrackSeg_env.yaml
@@ -104,7 +104,7 @@ ls data/splits/
 
 ---
 
-### Step 1：訓練 CrackSeg 三個模型（DeepLabV3+ / PP-LiteSeg-T / PIDNet-S）
+### Step 1：訓練 CrackSeg 三個模型（DeepLabV3-MobileNetV3 / DDRNet-23-slim / PP-LiteSeg-T）
 
 這三個模型共用同一個訓練腳本，透過不同的 config 檔切換。
 
@@ -122,14 +122,14 @@ scripts\run_train_crackseg.bat
 ```bash
 conda activate CrackSeg
 
-# 訓練 DeepLabV3+（ResNet-101 backbone）
-python training/train_crackseg.py --config configs/deeplabv3plus.yaml
+# 訓練 DeepLabV3 (MobileNetV3-Large backbone，語意分割基準)
+python training/train_crackseg.py --config configs/deeplabv3_mobilenet.yaml
 
-# 訓練 PP-LiteSeg-T（STDC1 backbone，主要模型）
+# 訓練 DDRNet-23-slim（雙分支即時分割）
+python training/train_crackseg.py --config configs/final/ddrnet.yaml
+
+# 訓練 PP-LiteSeg-T（STDC1 backbone，主要輕量模型）
 python training/train_crackseg.py --config configs/ppliteseg.yaml
-
-# 訓練 PIDNet-S（對照模型）
-python training/train_crackseg.py --config configs/pidnet.yaml
 ```
 
 > **注意**：PP-LiteSeg 與 PIDNet 需要先 clone zh320 repo 至專案根目錄：
@@ -155,7 +155,7 @@ Epoch  10 | loss=0.2934 | IoU=0.6033 Dice=0.7523 P=0.7801 R=0.7261
 
 ```
 outputs/checkpoints/
-├── deeplabv3plus/
+├── deeplabv3_mobilenet/
 │   ├── best.pth          ← Val IoU 最高的權重（用於評估）
 │   ├── epoch_010.pth
 │   ├── epoch_020.pth
@@ -253,7 +253,7 @@ scripts\run_eval_all.bat
 
 1. **CrackSeg 推論**（`CrackSeg` env）：對 test set 產生 PNG binary mask
    ```
-   outputs/predictions/deeplabv3plus/
+   outputs/predictions/deeplabv3_mobilenet/
    outputs/predictions/ppliteseg/
    outputs/predictions/pidnet/
    ```
@@ -272,7 +272,7 @@ scripts\run_eval_all.bat
 
 | model | iou | dice | precision | recall | fps | inference_ms |
 |-------|-----|------|-----------|--------|-----|--------------|
-| deeplabv3plus | — | — | — | — | — | — |
+| deeplabv3_mobilenet | — | — | — | — | — | — |
 | ppliteseg | — | — | — | — | — | — |
 | pidnet | — | — | — | — | — | — |
 | maskrcnn | — | — | — | — | — | — |
@@ -293,7 +293,7 @@ trainer.resume_or_load(resume=True)
 
 在對應的 config YAML 中調低 `batch_size`：
 ```yaml
-# configs/deeplabv3plus.yaml
+# configs/deeplabv3_mobilenet.yaml
 training:
   batch_size: 4  # 從 8 調低至 4
 ```
@@ -363,15 +363,15 @@ tensorboard --logdir=outputs/runs --port=6006
 │       └── test.txt
 ├── configs/
 │   ├── base.yaml               # Shared defaults
-│   ├── deeplabv3plus.yaml
+│   ├── deeplabv3_mobilenet.yaml
 │   ├── ppliteseg.yaml
 │   ├── pidnet.yaml
 │   └── maskrcnn.yaml
 ├── models/
-│   ├── deeplabv3plus.py        # torchvision wrapper, binary output
+│   ├── deeplabv3_mobilenet.py        # torchvision wrapper, binary output
 │   └── losses.py               # BCEDiceLoss
 ├── training/
-│   ├── train_crackseg.py       # Unified trainer (DeepLabV3+, PP-LiteSeg, PIDNet)
+│   ├── train_crackseg.py       # Unified trainer (DeepLabV3-MobileNetV3, PP-LiteSeg, PIDNet)
 │   ├── train_maskrcnn.py       # Detectron2 trainer (CrackPre env)
 │   └── lr_scheduler.py         # Warmup + cosine annealing
 ├── evaluation/
@@ -424,12 +424,12 @@ tensorboard --logdir=outputs/runs --port=6006
 
 ## Results
 
-| Model | IoU | Dice | Precision | Recall | FPS |
-|-------|-----|------|-----------|--------|-----|
-| Mask R-CNN | — | — | — | — | — |
-| DeepLabV3+ | — | — | — | — | — |
-| PP-LiteSeg-T | — | — | — | — | — |
-| PIDNet-S | — | — | — | — | — |
+| Model | Params | IoU | Dice | Precision | Recall | FPS |
+|-------|--------|-----|------|-----------|--------|-----|
+| Mask R-CNN | 44M | — | — | — | — | — |
+| DeepLabV3 (MobileNetV3-Large) | 11M | — | — | — | — | — |
+| DDRNet-23-slim | 5.6M | — | — | — | — | — |
+| PP-LiteSeg-T | 5M | — | — | — | — | — |
 
 *Results will be filled after experiments complete.*
 

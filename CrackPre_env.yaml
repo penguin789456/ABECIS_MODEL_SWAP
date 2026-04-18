@@ -1,0 +1,32 @@
+name: CrackPre
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - torch==2.1.2
+      - torchvision==0.16.2
+      - numpy
+      - opencv-python
+      - pillow
+      - pycocotools
+      - fvcore
+      - iopath
+      - pyyaml
+      - tqdm
+      - scipy
+      - pandas
+      - omegaconf
+      - hydra-core
+      - black
+      - cloudpickle
+      - future
+      - matplotlib
+      - termcolor
+      - yacs
+      - tabulate
+      - tensorboard

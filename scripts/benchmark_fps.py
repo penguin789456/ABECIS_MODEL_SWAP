@@ -9,7 +9,7 @@ Warms up 10 batches, then times 100 forward passes and reports:
 
 Usage:
     conda activate CrackSeg
-    python scripts/benchmark_fps.py --config configs/deeplabv3plus.yaml
+    python scripts/benchmark_fps.py --config configs/deeplabv3_mobilenet.yaml
     python scripts/benchmark_fps.py --config configs/ppliteseg.yaml --batch_size 1
 """
 

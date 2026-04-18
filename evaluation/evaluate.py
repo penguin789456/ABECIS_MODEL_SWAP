@@ -25,10 +25,10 @@ from PIL import Image
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from evaluation.metrics import compute_metrics
+from evaluation.metrics import compute_metrics, compute_metrics_2d
 from evaluation.postprocess import postprocess_mask
 
-MODELS = ["deeplabv3plus", "ppliteseg", "pidnet", "maskrcnn"]
+MODELS = ["deeplabv3_mobilenet", "ppliteseg", "ddrnet", "maskrcnn"]
 
 
 def evaluate_model(
@@ -38,6 +38,7 @@ def evaluate_model(
     pred_dir: Path,
 ) -> dict[str, float]:
     all_preds, all_gts = [], []
+    all_preds_2d, all_gts_2d = [], []
     missing = 0
 
     for stem in test_stems:
@@ -55,19 +56,35 @@ def evaluate_model(
 
         pred = np.array(Image.open(pred_path).convert("L")) > 127
         gt = np.array(Image.open(gt_path).convert("L")) > 127
+        # Guard against EXIF-rotation mismatch (pred stitched from RGB, GT loaded raw)
+        if pred.shape != gt.shape:
+            if pred.shape == gt.shape[::-1]:
+                pred = pred.T   # transpose to match GT orientation
+            else:
+                pred = np.array(
+                    Image.fromarray(pred).resize((gt.shape[1], gt.shape[0]), Image.NEAREST)
+                )
         all_preds.append(pred.ravel())
         all_gts.append(gt.ravel())
+        all_preds_2d.append(pred)
+        all_gts_2d.append(gt)
 
     if missing > 0:
         print(f"  [{model_name}] {missing}/{len(test_stems)} predictions missing")
 
     if not all_preds:
         print(f"  [{model_name}] No predictions found — skipping")
-        return {"iou": 0.0, "dice": 0.0, "precision": 0.0, "recall": 0.0}
+        return {"iou": 0.0, "dice": 0.0, "precision": 0.0, "recall": 0.0, "cldice": 0.0}
 
     all_preds_arr = np.concatenate(all_preds)
     all_gts_arr = np.concatenate(all_gts)
-    return compute_metrics(all_preds_arr, all_gts_arr)
+    metrics = compute_metrics(all_preds_arr, all_gts_arr)
+
+    # clDice: average per image (skeleton-based, must operate on 2D arrays)
+    from evaluation.metrics import compute_cldice
+    cldice_scores = [compute_cldice(p, g) for p, g in zip(all_preds_2d, all_gts_2d)]
+    metrics["cldice"] = float(np.mean(cldice_scores))
+    return metrics
 
 
 def main(
@@ -91,10 +108,11 @@ def main(
         records.append(metrics)
         print(
             f"  IoU={metrics['iou']:.4f}  Dice={metrics['dice']:.4f}  "
-            f"Precision={metrics['precision']:.4f}  Recall={metrics['recall']:.4f}\n"
+            f"Precision={metrics['precision']:.4f}  Recall={metrics['recall']:.4f}  "
+            f"clDice={metrics.get('cldice', 0.0):.4f}\n"
         )
 
-    df = pd.DataFrame(records).set_index("model")[["iou", "dice", "precision", "recall"]]
+    df = pd.DataFrame(records).set_index("model")[["iou", "dice", "precision", "recall", "cldice"]]
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     out_path = Path(output_dir) / "metrics_summary.csv"
     df.to_csv(out_path)

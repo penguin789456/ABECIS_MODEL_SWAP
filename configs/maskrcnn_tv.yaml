@@ -1,0 +1,33 @@
+# Mask R-CNN ResNet-50 FPN — torchvision implementation
+# Runs inside CrackSeg conda environment (NO Detectron2 needed)
+# Same architecture as Detectron2 Mask R-CNN; COCO-pretrained backbone.
+
+model:
+  name: maskrcnn
+  pretrained: true             # use COCO pretrained weights
+
+training:
+  optimizer: sgd
+  lr: 0.005                    # lower than Detectron2 default (different batch size)
+  momentum: 0.9
+  weight_decay: 1.0e-4
+  batch_size: 2                # images per GPU iteration
+  epochs: 50
+  warmup_epochs: 3
+  lr_steps: [30, 42]          # MultiStepLR milestones
+  pretrained: true
+  num_workers: 0
+  seed: 42
+
+dataset:
+  root: concreteCrackSegmentationDataset
+  splits_dir: data/splits
+
+checkpoint:
+  save_dir: outputs/checkpoints/maskrcnn
+  eval_period_epochs: 5        # evaluate every N epochs
+
+evaluation:
+  predictions_dir: outputs/predictions/maskrcnn
+  threshold: 0.5               # mask binarisation threshold
+  score_threshold: 0.3         # minimum detection score to include

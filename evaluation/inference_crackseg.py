@@ -5,7 +5,7 @@ Runs full-image patch inference with overlap averaging (stitching), then
 saves one binary PNG mask per test image to outputs/predictions/<model>/.
 
 Usage (inside CrackSeg conda env):
-    python evaluation/inference_crackseg.py --config configs/deeplabv3plus.yaml
+    python evaluation/inference_crackseg.py --config configs/deeplabv3_mobilenet.yaml
     python evaluation/inference_crackseg.py --config configs/ppliteseg.yaml
     python evaluation/inference_crackseg.py --config configs/pidnet.yaml
 """
@@ -106,6 +106,8 @@ def run_inference(cfg: dict) -> None:
 
     out_dir = Path(cfg["evaluation"]["predictions_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
+    threshold = cfg.get("evaluation", {}).get("threshold", 0.5)
+    print(f"Inference threshold: {threshold}")
 
     for stem in tqdm(stems, desc="Inference"):
         rgb_p = rgb_index.get(stem.lower())
@@ -117,6 +119,7 @@ def run_inference(cfg: dict) -> None:
             image, model, device, transform,
             patch_size=ds_cfg["patch_size"],
             overlap=ds_cfg["overlap"],
+            threshold=threshold,
         )
         Image.fromarray(mask).save(out_dir / f"{stem}.png")
 
@@ -128,7 +131,7 @@ if __name__ == "__main__":
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
 
-    with open(args.config) as f:
+    with open(args.config, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
     run_inference(cfg)

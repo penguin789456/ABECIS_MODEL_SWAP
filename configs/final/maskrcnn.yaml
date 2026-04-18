@@ -1,0 +1,66 @@
+# ============================================================
+# Mask R-CNN R50-FPN — FINALIZED CONFIG (ABECIS Baseline)
+# ============================================================
+# Status      : 待訓練  (需切換至 CrackPre 環境)
+# Date        : —
+# Checkpoint  : outputs/checkpoints/maskrcnn/model_final.pth
+# Iterations  : — / 8000
+#
+# --- Val Metrics (pixel-level, threshold=0.5) ---
+# IoU         : 待填   ← 本研究重新以 pixel-level IoU 評估，與 ABECIS 原論文 instance IoU 不同
+# Dice        : 待填
+# Precision   : 待填
+# Recall      : 待填
+# clDice      : 待填
+#
+# --- ABECIS 原論文數據（供對比參考）---
+# Original IoU : 0.958  (instance-level median IoU，非 pixel-level，不可直接比較)
+# 評估說明     : 本研究在相同測試集以 pixel-level IoU 重新評估，確保跨模型比較公平
+#
+# --- Efficiency ---
+# FPS         : ~3  (ABECIS 論文數據，本研究實測後更新)
+# Latency(ms) : 待測
+# Params      : ~44M  (ResNet-50 + FPN + Mask head)
+# Model Size  : 待測 MB
+#
+# --- Notes ---
+#   - 需切換環境: conda activate CrackPre
+#   - 使用 Detectron2 DefaultTrainer，非 PyTorch 直接訓練
+#   - 訓練指令: python training/train_maskrcnn.py --config configs/final/maskrcnn.yaml
+# ============================================================
+
+model:
+  name: maskrcnn
+  config_file: COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml
+  pretrained_weights: detectron2://ImageNetPretrained/MSRA/R-50.pkl
+
+training:
+  optimizer: sgd
+  lr: 0.001
+  momentum: 0.9
+  weight_decay: 1.0e-4
+  batch_size: 2
+  max_iter: 8000
+  warmup_iters: 200
+  lr_steps: [5000, 7000]
+  seed: 42
+  output_dir: outputs
+
+dataset:
+  root: concreteCrackSegmentationDataset
+  splits_dir: data/splits
+  coco_annotations_dir: outputs/coco_annotations
+
+dataset_detectron2:
+  thing_classes: ["crack"]
+  mask_format: bitmask
+
+checkpoint:
+  save_dir: outputs/checkpoints/maskrcnn
+  eval_period: 500
+
+evaluation:
+  metrics: [iou, dice, precision, recall, cldice]
+  threshold: 0.5
+  save_predictions: true
+  predictions_dir: outputs/predictions/maskrcnn

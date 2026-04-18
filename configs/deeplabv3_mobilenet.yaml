@@ -1,0 +1,48 @@
+# DeepLabV3 (MobileNetV3-Large) — semantic segmentation baseline
+# Inherits defaults from base.yaml; only overrides are listed here
+
+model:
+  name: deeplabv3_mobilenet
+  backbone: mobilenet_v3_large   # ~11M params — change to resnet50/resnet101 if needed
+  pretrained: true
+  num_classes: 1                 # binary segmentation
+
+training:
+  optimizer: adamw
+  lr: 2.0e-4
+  weight_decay: 1.0e-4
+  batch_size: 32   # MobileNetV3 (11M params) fits batch=32 comfortably on RTX 5060 Ti
+  epochs: 150
+  warmup_epochs: 5
+  scheduler: cosine
+  seed: 42
+  output_dir: outputs
+
+loss:
+  type: bce_dice
+  bce_weight: 0.5
+  dice_weight: 0.5
+
+dataset:
+  root: concreteCrackSegmentationDataset
+  splits_dir: data/splits
+  patch_size: 512
+  overlap: 128
+  num_workers: 0
+  prefetch_factor: 2
+  pin_memory: false
+  persistent_workers: false
+  precomputed_dir: data/patches
+  oversample_positive: true   # positive patch oversampling — proven effective (+0.027 IoU)
+  positive_weight: 5.0
+
+checkpoint:
+  save_dir: outputs/checkpoints/deeplabv3_mobilenet
+  save_best_metric: iou
+  save_every_n_epochs: 10
+
+evaluation:
+  metrics: [iou, dice, precision, recall]
+  threshold: 0.5   # run threshold_sweep.py after training to confirm optimal value
+  save_predictions: true
+  predictions_dir: outputs/predictions/deeplabv3_mobilenet

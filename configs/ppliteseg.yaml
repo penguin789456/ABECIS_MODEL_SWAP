@@ -45,6 +45,6 @@ checkpoint:
 
 evaluation:
   metrics: [iou, dice, precision, recall]
-  threshold: 0.6   # tuned via threshold_sweep.py on FocalDice best.pth
+  threshold: 0.65  # swept 0.45-0.75 step=0.025; best IoU=0.3769 at t=0.65
   save_predictions: true
   predictions_dir: outputs/predictions/ppliteseg

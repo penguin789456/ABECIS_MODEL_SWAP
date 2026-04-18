@@ -30,14 +30,15 @@ from data.transforms import get_val_transforms
 def build_model(model_cfg: dict) -> torch.nn.Module:
     name = model_cfg["name"].lower()
 
-    if name == "deeplabv3plus":
-        from models.deeplabv3plus import DeepLabV3Plus
-        return DeepLabV3Plus(pretrained=False)
+    if name == "deeplabv3_mobilenet":
+        from models.deeplabv3_mobilenet import DeepLabV3Mobilenet
+        return DeepLabV3Mobilenet(pretrained=False)
 
     if name == "ppliteseg":
         zh320_root = (Path(__file__).resolve().parent.parent
                       / "realtime-semantic-segmentation-pytorch")
         sys.path.insert(0, str(zh320_root))
+        import importlib; importlib.invalidate_caches()
         _saved = {k: v for k, v in list(sys.modules.items())
                   if k == "models" or k.startswith("models.")}
         for k in _saved:
@@ -48,20 +49,23 @@ def build_model(model_cfg: dict) -> torch.nn.Module:
             sys.modules.update(_saved)
         return PPLiteSeg(num_class=1, encoder_type=model_cfg.get("backbone", "STDC1").lower())
 
-    if name == "pidnet":
+    if name in ("pidnet", "ddrnet"):
+        import importlib
         zh320_root = (Path(__file__).resolve().parent.parent
                       / "realtime-semantic-segmentation-pytorch")
-        sys.path.insert(0, str(zh320_root))
+        if str(zh320_root) not in sys.path:
+            sys.path.insert(0, str(zh320_root))
+        importlib.invalidate_caches()
         _saved = {k: v for k, v in list(sys.modules.items())
                   if k == "models" or k.startswith("models.")}
         for k in _saved:
             del sys.modules[k]
         try:
-            from models.pidnet import PIDNet  # type: ignore[import]
+            from models.ddrnet import DDRNet  # type: ignore[import]
         finally:
             sys.modules.update(_saved)
-        # Match constructor args used in training/train_crackseg.py
-        return PIDNet(num_classes=1, variant=model_cfg.get("variant", "pidnet_s"))
+        arch_type = model_cfg.get("arch_type", "DDRNet-23-slim")
+        return DDRNet(num_class=1, arch_type=arch_type)
 
     raise ValueError(f"Unknown model: {name}")
 

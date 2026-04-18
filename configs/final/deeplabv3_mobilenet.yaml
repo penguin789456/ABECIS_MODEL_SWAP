@@ -1,0 +1,74 @@
+# ============================================================
+# DeepLabV3 (MobileNetV3-Large) — FINALIZED CONFIG
+# ============================================================
+# Status      : 待訓練
+# Backbone    : MobileNetV3-Large (replaces ResNet-101)
+# Checkpoint  : outputs/checkpoints/deeplabv3_mobilenet/<timestamp>/best.pth
+# Epochs      : — / 150
+#
+# --- Val Metrics (threshold=待sweep) ---
+# IoU         : 待填
+# Dice        : 待填
+# Precision   : 待填
+# Recall      : 待填
+#
+# --- Efficiency ---
+# FPS         : 待測
+# Latency(ms) : 待測
+# Params      : ~11M  (MobileNetV3-Large backbone)
+# Model Size  : 待測 MB
+#
+# --- Notes ---
+#   - Batch size 32 (MobileNetV3 is much lighter than ResNet-101)
+#   - num_workers=0: Windows single-process fastest (no IPC overhead)
+#   - Same BCEDice + oversampling as PP-LiteSeg/DDRNet for fair comparison
+#   - Run threshold_sweep.py after training to confirm optimal threshold
+#   - Backbone changed from ResNet-101 (~59M) to MobileNetV3-Large (~11M)
+#     for better size gradient: Mask R-CNN(44M)→DeepLabV3-MobileNet(11M)→DDRNet(5.6M)→PP-LiteSeg(5M)
+# ============================================================
+
+model:
+  name: deeplabv3_mobilenet
+  backbone: mobilenet_v3_large
+  pretrained: true
+  num_classes: 1
+
+training:
+  optimizer: adamw
+  lr: 2.0e-4
+  weight_decay: 1.0e-4
+  batch_size: 32
+  epochs: 150
+  warmup_epochs: 5
+  scheduler: cosine
+  seed: 42
+  output_dir: outputs
+
+loss:
+  type: bce_dice
+  bce_weight: 0.5
+  dice_weight: 0.5
+
+dataset:
+  root: concreteCrackSegmentationDataset
+  splits_dir: data/splits
+  patch_size: 512
+  overlap: 128
+  num_workers: 0
+  prefetch_factor: 2
+  pin_memory: false
+  persistent_workers: false
+  precomputed_dir: data/patches
+  oversample_positive: true
+  positive_weight: 5.0
+
+checkpoint:
+  save_dir: outputs/checkpoints/deeplabv3_mobilenet
+  save_best_metric: iou
+  save_every_n_epochs: 10
+
+evaluation:
+  metrics: [iou, dice, precision, recall]
+  threshold: 0.5
+  save_predictions: true
+  predictions_dir: outputs/predictions/deeplabv3_mobilenet
