@@ -173,6 +173,115 @@ def validate(
 
 
 # ---------------------------------------------------------------------------
+# Training-info snapshot
+# ---------------------------------------------------------------------------
+
+def _write_run_info(
+    cfg: dict,
+    ckpt_dir: Path,
+    tb_dir: Path,
+    train_ds,
+    val_ds,
+    device: torch.device,
+) -> None:
+    """Write a human-readable training summary to <ckpt_dir>/train_info.txt."""
+    import platform
+    import socket
+
+    tr_cfg = cfg["training"]
+    ds_cfg = cfg["dataset"]
+    m_cfg  = cfg["model"]
+    l_cfg  = cfg["loss"]
+
+    n_train = len(train_ds)
+    n_val   = len(val_ds)
+
+    # Positive-patch stats (PrecomputedCrackDataset only)
+    pos_line = ""
+    if hasattr(train_ds, "_sample_weights") and train_ds._sample_weights is not None:
+        import numpy as _np
+        sw        = _np.array(train_ds._sample_weights, dtype=float)
+        n_pos     = int((sw > 1.0).sum())
+        pos_ratio = n_pos / n_train * 100 if n_train else 0.0
+        pos_line  = f"  positive patches : {n_pos} / {n_train} ({pos_ratio:.1f}%)"
+
+    # GPU
+    if device.type == "cuda":
+        gpu_name = torch.cuda.get_device_name(device)
+        cuda_ver = torch.version.cuda or "?"
+    else:
+        gpu_name = "CPU"
+        cuda_ver = "N/A"
+
+    lines = [
+        "=" * 60,
+        "  Training Run Information",
+        "=" * 60,
+        f"  Generated     : {time.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"  Config        : {cfg.get('_config_path', 'N/A')}",
+        f"  Run ID        : {ckpt_dir.name}",
+        f"  Checkpoint    : {ckpt_dir}",
+        f"  TensorBoard   : {tb_dir}",
+        "",
+        "── Model ──────────────────────────────────────────────────",
+        f"  name          : {m_cfg.get('name', '?')}",
+        f"  backbone      : {m_cfg.get('backbone', 'default')}",
+        f"  pretrained    : {m_cfg.get('pretrained', False)}",
+        f"  num_classes   : {m_cfg.get('num_classes', 1)}",
+        "",
+        "── Training ───────────────────────────────────────────────",
+        f"  epochs        : {tr_cfg['epochs']}",
+        f"  batch_size    : {tr_cfg['batch_size']}",
+        f"  optimizer     : {tr_cfg.get('optimizer', 'adamw')}",
+        f"  lr            : {tr_cfg['lr']}",
+        f"  weight_decay  : {tr_cfg.get('weight_decay', 0)}",
+        f"  warmup_epochs : {tr_cfg.get('warmup_epochs', 0)}",
+        f"  scheduler     : {tr_cfg.get('scheduler', 'cosine')}",
+        f"  seed          : {tr_cfg.get('seed', 42)}",
+        "",
+        "── Loss ───────────────────────────────────────────────────",
+        f"  type          : {l_cfg.get('type', 'bce_dice')}",
+        f"  bce_weight    : {l_cfg.get('bce_weight', 0.5)}",
+        f"  dice_weight   : {l_cfg.get('dice_weight', 0.5)}",
+    ]
+    for key in ("pos_weight", "alpha", "beta", "gamma"):
+        if key in l_cfg:
+            lines.append(f"  {key:<14}: {l_cfg[key]}")
+
+    lines += [
+        "",
+        "── Dataset ────────────────────────────────────────────────",
+        f"  root          : {ds_cfg.get('root', '?')}",
+        f"  splits_dir    : {ds_cfg.get('splits_dir', '?')}",
+        f"  precomputed   : {ds_cfg.get('precomputed_dir', 'none')}",
+        f"  patch_size    : {ds_cfg.get('patch_size', 512)}",
+        f"  overlap       : {ds_cfg.get('overlap', 0)}",
+        f"  num_workers   : {ds_cfg.get('num_workers', 0)}",
+        f"  oversample    : {ds_cfg.get('oversample_positive', False)}",
+        f"  pos_weight    : {ds_cfg.get('positive_weight', 1.0)}",
+        f"  train patches : {n_train}",
+    ]
+    if pos_line:
+        lines.append(pos_line)
+    lines += [
+        f"  val patches   : {n_val}",
+        "",
+        "── System ─────────────────────────────────────────────────",
+        f"  hostname      : {socket.gethostname()}",
+        f"  platform      : {platform.platform()}",
+        f"  Python        : {platform.python_version()}",
+        f"  PyTorch       : {torch.__version__}",
+        f"  CUDA          : {cuda_ver}",
+        f"  GPU           : {gpu_name}",
+        "=" * 60,
+    ]
+
+    info_path = ckpt_dir / "train_info.txt"
+    info_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Train info      → {info_path}")
+
+
+# ---------------------------------------------------------------------------
 # Main training loop
 # ---------------------------------------------------------------------------
 
@@ -339,6 +448,10 @@ def train(cfg: dict) -> None:
     print(f"TensorBoard logs → {tb_dir}")
     print(f"CSV log         → {log_path}")
 
+    # ── Training info snapshot ────────────────────────────────────────────────
+    if not cfg.get("resume"):
+        _write_run_info(cfg, ckpt_dir, tb_dir, train_ds, val_ds, device)
+
     best_iou   = 0.0
     start_epoch = 1
     save_every  = cfg["checkpoint"].get("save_every_n_epochs", 10)
@@ -463,6 +576,8 @@ if __name__ == "__main__":
 
     with open(args.config, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
+
+    cfg["_config_path"] = str(Path(args.config).resolve())
 
     if args.resume:
         cfg["resume"] = args.resume

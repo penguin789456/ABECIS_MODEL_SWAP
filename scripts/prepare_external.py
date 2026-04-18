@@ -382,6 +382,24 @@ def main() -> None:
         "--generic_prefix", default="ext",
         help="Filename prefix for generic dataset images (default: ext)"
     )
+    # CFD (Crack Forest Dataset)
+    parser.add_argument(
+        "--cfd_img_dir", default=None,
+        help="CFD: path to cfd_image/ folder (extracted from cfd_image.zip)"
+    )
+    parser.add_argument(
+        "--cfd_mask_dir", default=None,
+        help="CFD: path to seg_gt/ folder (extracted from cfd_gt.zip)"
+    )
+    # GAPS384
+    parser.add_argument(
+        "--gaps384_img_dir", default=None,
+        help="GAPS384: path to croppedimg/ folder (extracted from croppedimg.zip)"
+    )
+    parser.add_argument(
+        "--gaps384_mask_dir", default=None,
+        help="GAPS384: path to croppedgt/ folder (extracted from croppedgt.zip)"
+    )
     parser.add_argument(
         "--original_splits_dir", default="data/splits",
         help="Existing split files to use as base (default: data/splits)"
@@ -422,6 +440,24 @@ def main() -> None:
             Path(args.generic_mask_dir),
             output_root,
             prefix=args.generic_prefix,
+        )
+        external_stems.extend(stems)
+
+    if args.cfd_img_dir and args.cfd_mask_dir:
+        stems = merge_generic(
+            Path(args.cfd_img_dir),
+            Path(args.cfd_mask_dir),
+            output_root,
+            prefix="cfd",
+        )
+        external_stems.extend(stems)
+
+    if args.gaps384_img_dir and args.gaps384_mask_dir:
+        stems = merge_generic(
+            Path(args.gaps384_img_dir),
+            Path(args.gaps384_mask_dir),
+            output_root,
+            prefix="gaps",
         )
         external_stems.extend(stems)
 
