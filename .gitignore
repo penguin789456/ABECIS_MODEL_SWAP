@@ -225,6 +225,7 @@ outputs/
 
 # Third-party cloned repos
 realtime-semantic-segmentation-pytorch/
+detectron2/
 
 # Packaged tarballs for Colab upload
 *.tar.gz
