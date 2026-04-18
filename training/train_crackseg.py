@@ -24,14 +24,26 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-# Allow imports from project root
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+# ── sys.path setup (must happen before ANY local imports) ─────────────────────
+# On Windows, DataLoader workers are spawned via multiprocessing.spawn, which
+# re-executes this file as __main__. __file__ can be relative in that context,
+# so resolve() may return a wrong path if the worker's cwd differs from the
+# project root. We also set PYTHONPATH so the spawned processes inherit it from
+# their environment before any Python code even runs.
 
-# Add zh320 repo to sys.path at module level so DataLoader worker subprocesses
-# (which re-import this module via multiprocessing spawn) can also find it.
-# Append AFTER project root so local models/ (losses.py etc.) still takes priority.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# 1. Always insert unconditionally (handles all cwd scenarios)
+sys.path.insert(0, str(_PROJECT_ROOT))
+
+# 2. Propagate to child processes via PYTHONPATH
+_pp = os.environ.get("PYTHONPATH", "")
+if str(_PROJECT_ROOT) not in _pp.split(os.pathsep):
+    os.environ["PYTHONPATH"] = (
+        str(_PROJECT_ROOT) + (os.pathsep + _pp if _pp else "")
+    )
+
+# 3. Add zh320 repo AFTER project root so local models/ takes priority over zh320's
 _ZH320_ROOT = _PROJECT_ROOT / "realtime-semantic-segmentation-pytorch"
 if _ZH320_ROOT.exists() and str(_ZH320_ROOT) not in sys.path:
     sys.path.append(str(_ZH320_ROOT))
