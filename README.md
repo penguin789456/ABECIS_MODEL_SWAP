@@ -1,446 +1,231 @@
 # ABECIS_MODEL_SWAP — Concrete Crack Segmentation
 
-Comparative study of four deep learning segmentation models on a custom concrete crack dataset, as part of a Master's thesis.
+Comparative study of lightweight semantic segmentation models vs. the ABECIS Mask R-CNN baseline on a concrete crack dataset, as part of a Master's thesis.
 
-| Model | Role | Params | Environment |
-|-------|------|--------|-------------|
-| Mask R-CNN R50-FPN | Instance segmentation baseline (ABECIS) | 44M | CrackPre (Detectron2) |
-| DeepLabV3 (MobileNetV3-Large) | Semantic segmentation baseline | 11M | CrackSeg |
-| DDRNet-23-slim | Dual-branch real-time model | 5.6M | CrackSeg |
-| PP-LiteSeg-T (STDC1) | Primary lightweight model | 5M | CrackSeg |
+**Research question:** Can a lightweight semantic segmentation model replace ABECIS's instance segmentation framework with minimal accuracy trade-off while drastically reducing computational cost?
 
----
+| Model | Role | Params | Test IoU |
+|-------|------|--------|----------|
+| Mask R-CNN R50-FPN | ABECIS baseline | 44M | (pending) |
+| DeepLabV3 (MobileNetV3-Large) | Semantic seg baseline | 11M | (pending) |
+| DDRNet-23-slim | Dual-branch real-time | 5.6M | **0.3912** |
+| PP-LiteSeg-T (STDC1) | Primary lightweight model | 5M | **0.4391** |
 
-## Dataset Setup
-
-> **The dataset is NOT included in this repository** (excluded via `.gitignore`).
-
-Place the dataset files at the following paths before running any scripts:
-
-```
-concreteCrackSegmentationDataset/
-├── rgb/        ← 458 original concrete images (.jpg / .JPG)
-├── BW/         ← 458 binary masks (.jpg, white pixel = crack)
-└── testing/    ← 22 additional evaluation images
-```
-
-After placing the dataset, validate and generate the train/val/test splits:
-
-```bash
-conda activate CrackSeg
-python scripts/prepare_dataset.py
-```
-
-This will:
-- Validate all 458 rgb/BW image pairs (handles mixed .jpg/.JPG extensions)
-- Generate frozen split files at `data/splits/{train,val,test}.txt` (70% / 15% / 15%)
-- Convert binary masks to COCO-format JSON for Detectron2 (`outputs/coco_annotations/`)
-
-> **Important:** Commit `data/splits/` to git after generation. All four models must be evaluated on the same frozen test set.
+All models evaluated with unified **pixel-level IoU** on the same frozen test set (70 Mendeley images).
 
 ---
 
 ## Environment Setup
 
-### CrackSeg — DeepLabV3 (MobileNetV3), DDRNet, PP-LiteSeg
+All models run in a single **CrackSeg** conda environment.
 
 ```bash
 conda env create -f CrackSeg_env.yaml
 conda activate CrackSeg
+
+# Required for PP-LiteSeg and DDRNet
 git clone https://github.com/zh320/realtime-semantic-segmentation-pytorch
 ```
 
-### CrackPre — Mask R-CNN / Detectron2
-
-```bash
-# Windows: install C++ Build Tools first
-# https://visualstudio.microsoft.com/visual-cpp-build-tools/
-
-conda env create -n CrackPre -f ComplateENV.yaml
-conda activate CrackPre
-pip install -e detectron2 --no-build-isolation
-```
-
-> If `import detectron2` fails, run `Fixdetectron2.bat`.
-
 ---
 
-## Quick Start
+## Dataset
+
+> The dataset is **not included** in this repository (excluded via `.gitignore`).
+
+Three dataset tiers are used:
+
+| Version | Folder | Contents | Train images |
+|---------|--------|----------|-------------|
+| v0 | `concreteCrackSegmentationDataset/` | Mendeley (458 images) | 320 |
+| v1 | `dataset_merged_v1/` | v0 + DeepCrack (537) | 857 |
+| v2 | `dataset_merged_v2/` | v1 + CRACK500 (1,896) + CFD (118) + GAPS384 (509) | 3,380 |
+
+**Test set is frozen at the original 70 Mendeley images for all experiments.**
+
+### Prepare base dataset (v0)
+
+Place files at `concreteCrackSegmentationDataset/rgb/` and `.../BW/`, then:
 
 ```bash
-# 1. Prepare dataset (CrackSeg env)
+conda activate CrackSeg
 python scripts/prepare_dataset.py
-
-# 2. Train all three CrackSeg models
-scripts\run_train_crackseg.bat
-
-# 3. Train Mask R-CNN (switch to CrackPre env)
-scripts\run_train_maskrcnn.bat
-
-# 4. Run inference + unified evaluation
-scripts\run_eval_all.bat
-# Results → outputs/results/metrics_summary.csv
 ```
 
----
-
-## Training Guide
-
-### 前置確認
-
-開始訓練前，確保以下條件已滿足：
-
-- [ ] `concreteCrackSegmentationDataset/` 已放置於專案根目錄
-- [ ] `data/splits/train.txt`、`val.txt`、`test.txt` 已存在（執行過 `prepare_dataset.py`）
-- [ ] `outputs/coco_annotations/train.json`、`val.json`、`test.json` 已存在（Mask R-CNN 需要）
-- [ ] `CrackSeg` conda 環境已建立
-- [ ] `CrackPre` conda 環境已建立（Mask R-CNN 才需要）
+### Merge external datasets (v1 / v2)
 
 ```bash
-# 驗證 splits 是否存在
-ls data/splits/
-# 應輸出：test.txt  train.txt  val.txt
+# v1: Mendeley + DeepCrack
+python scripts/prepare_external.py \
+    --deepcrack_dir /path/to/DeepCrack \
+    --output_root dataset_merged_v1 \
+    --output_splits_dir data/splits_v1
+
+# v2: all sources
+python scripts/prepare_external.py \
+    --deepcrack_dir    /path/to/DeepCrack \
+    --crack500_dir     /path/to/CRACK500/traincrop \
+    --cfd_img_dir      /path/to/CFD/cfd_image \
+    --cfd_mask_dir     /path/to/CFD/seg_gt \
+    --gaps384_img_dir  /path/to/GAPS384/croppedimg \
+    --gaps384_mask_dir /path/to/GAPS384/croppedgt \
+    --output_root      dataset_merged_v2 \
+    --output_splits_dir data/splits_v2
 ```
+
+### Precompute patch cache (required before training)
+
+```bash
+# Precompute for a specific config
+python scripts/precompute_patches.py --config configs/final/ppliteseg_v2.yaml
+```
+
+Patches are saved as `.npy` files under `data/patches_*/` and loaded directly at training time, eliminating CPU bottleneck and keeping GPU utilization stable.
 
 ---
 
-### Step 1：訓練 CrackSeg 三個模型（DeepLabV3-MobileNetV3 / DDRNet-23-slim / PP-LiteSeg-T）
-
-這三個模型共用同一個訓練腳本，透過不同的 config 檔切換。
-
-#### 方法 A：一鍵執行（推薦）
-
-```bat
-REM 從專案根目錄執行（Windows CMD）
-scripts\run_train_crackseg.bat
-```
-
-腳本會依序訓練三個模型，任一個失敗即停止。
-
-#### 方法 B：單獨訓練某個模型
+## Training
 
 ```bash
 conda activate CrackSeg
 
-# 訓練 DeepLabV3 (MobileNetV3-Large backbone，語意分割基準)
-python training/train_crackseg.py --config configs/deeplabv3_mobilenet.yaml
+# Baseline (Mendeley only)
+python training/train_crackseg.py --config configs/final/ppliteseg.yaml
 
-# 訓練 DDRNet-23-slim（雙分支即時分割）
-python training/train_crackseg.py --config configs/final/ddrnet.yaml
+# v1 experiment (+ DeepCrack)
+python training/train_crackseg.py --config configs/final/ppliteseg_v1.yaml
 
-# 訓練 PP-LiteSeg-T（STDC1 backbone，主要輕量模型）
-python training/train_crackseg.py --config configs/ppliteseg.yaml
+# v2 experiment (full merged dataset)
+python training/train_crackseg.py --config configs/final/ppliteseg_v2.yaml
+
+# Resume from checkpoint
+python training/train_crackseg.py --config configs/final/ppliteseg_v2.yaml \
+    --resume outputs/checkpoints/ppliteseg_v2/best.pth
 ```
 
-> **注意**：PP-LiteSeg 與 PIDNet 需要先 clone zh320 repo 至專案根目錄：
-> ```bash
-> git clone https://github.com/zh320/realtime-semantic-segmentation-pytorch
-> ```
+### Training outputs
 
-#### 訓練過程輸出
+Each run creates a timestamped folder under `outputs/checkpoints/{model}/{timestamp}/`:
 
 ```
-Epoch   5 | loss=0.3821 | IoU=0.5214 Dice=0.6851 P=0.7102 R=0.6613
-  -> Saved best checkpoint (IoU=0.5214)
-Epoch  10 | loss=0.2934 | IoU=0.6033 Dice=0.7523 P=0.7801 R=0.7261
-  -> Saved best checkpoint (IoU=0.6033)
-...
+outputs/checkpoints/ppliteseg_v2/
+├── best.pth              ← best val IoU checkpoint
+├── epoch_010.pth         ← periodic checkpoint (every 10 epochs)
+├── train_log.csv         ← per-epoch metrics (loss/IoU/Dice/P/R/lr/time/mem)
+└── train_info.txt        ← training parameters snapshot
 ```
 
-- 每 **5 個 epoch** 執行一次 validation，輸出 IoU / Dice / Precision / Recall
-- 每 **10 個 epoch** 儲存週期性 checkpoint
-- Val IoU 有提升時自動儲存 `best.pth`
+### Hyperparameters
 
-#### Checkpoint 輸出位置
-
-```
-outputs/checkpoints/
-├── deeplabv3_mobilenet/
-│   ├── best.pth          ← Val IoU 最高的權重（用於評估）
-│   ├── epoch_010.pth
-│   ├── epoch_020.pth
-│   └── ...
-├── ppliteseg/
-│   └── best.pth
-└── pidnet/
-    └── best.pth
-```
-
-#### 訓練超參數（CrackSeg 三個模型共用）
-
-| 超參數 | 值 |
-|--------|-----|
+| Parameter | Value |
+|-----------|-------|
 | Optimizer | AdamW |
-| Learning Rate | 1e-4 |
-| LR Schedule | 5 epoch warmup + CosineAnnealingLR |
-| Batch Size | 8 |
-| Epochs | 100 |
-| Loss | BCEDiceLoss（BCE 0.5 + Dice 0.5）|
-| Input Size | 512 × 512 patch |
-| Augmentation | HFlip、VFlip、Rotate ±10°、亮度/對比、Gaussian Noise |
+| Learning Rate | 1e-4 + cosine annealing |
+| Warmup | 5 epochs |
+| Batch Size | 32 |
+| Epochs | 150 |
+| Loss | BCEDiceLoss (BCE 0.5 + Dice 0.5) |
+| Patch Size | 512×512, overlap 128px |
+| Oversampling | WeightedRandomSampler, positive_weight=5.0 |
 
----
-
-### Step 2：訓練 Mask R-CNN（CrackPre 環境）
-
-Mask R-CNN 使用 Detectron2 框架，需切換至 `CrackPre` 環境，且需要 COCO JSON 格式的標註。
-
-#### 方法 A：一鍵執行
-
-```bat
-REM 從專案根目錄執行（Windows CMD）
-scripts\run_train_maskrcnn.bat
-```
-
-#### 方法 B：手動執行
+### Monitor training
 
 ```bash
-conda activate CrackPre
-python training/train_maskrcnn.py --config configs/maskrcnn.yaml
-```
+# TensorBoard
+tensorboard --logdir outputs/runs --port 6006
 
-#### 訓練過程輸出
-
-Detectron2 每 **500 iterations** 執行一次 validation（COCO AP 指標），並在 `outputs/checkpoints/maskrcnn/` 下儲存 checkpoint。
-
-```
-outputs/checkpoints/maskrcnn/
-├── model_final.pth       ← 最終權重
-├── model_0004999.pth
-├── metrics.json          ← 完整訓練 log
-└── last_checkpoint
-```
-
-#### 訓練超參數（Mask R-CNN）
-
-| 超參數 | 值 |
-|--------|-----|
-| Optimizer | SGD |
-| Base LR | 0.001 |
-| Momentum | 0.9 |
-| Batch Size | 2 images/iter |
-| Max Iterations | 8000 |
-| Warmup Iterations | 1000 |
-| LR Decay Steps | 5000, 7000 |
-| Backbone | ResNet-50 FPN（COCO pretrained）|
-| Loss | Cross-Entropy（cls + bbox + mask）|
-
----
-
-### Step 3：監控訓練（TensorBoard）
-
-> 需要訓練腳本輸出 TensorBoard log。目前訓練腳本以 stdout 輸出指標，若需視覺化請手動整合 `SummaryWriter`。
-
-啟動 TensorBoard：
-
-```bash
-conda activate CrackSeg
-tensorboard --logdir=outputs/runs --port=6006
-# 開啟瀏覽器：http://localhost:6006
+# GPU utilization
+nvidia-smi -l 1
 ```
 
 ---
 
-### Step 4：推論與評估
+## Evaluation
 
-三個模型都訓練完成後，執行完整的推論與評估流程：
-
-```bat
-scripts\run_eval_all.bat
-```
-
-流程說明：
-
-1. **CrackSeg 推論**（`CrackSeg` env）：對 test set 產生 PNG binary mask
-   ```
-   outputs/predictions/deeplabv3_mobilenet/
-   outputs/predictions/ppliteseg/
-   outputs/predictions/pidnet/
-   ```
-
-2. **Mask R-CNN 推論**（`CrackPre` env）：產生 PNG binary mask
-   ```
-   outputs/predictions/maskrcnn/
-   ```
-
-3. **統一評估**（`CrackSeg` env）：計算所有模型指標，輸出 CSV
-   ```
-   outputs/results/metrics_summary.csv
-   ```
-
-`metrics_summary.csv` 格式：
-
-| model | iou | dice | precision | recall | fps | inference_ms |
-|-------|-----|------|-----------|--------|-----|--------------|
-| deeplabv3_mobilenet | — | — | — | — | — | — |
-| ppliteseg | — | — | — | — | — | — |
-| pidnet | — | — | — | — | — | — |
-| maskrcnn | — | — | — | — | — | — |
-
----
-
-### 常見問題
-
-**Q：訓練中斷如何繼續？**
-
-目前 CrackSeg 訓練腳本不支援 resume，需從頭訓練。Mask R-CNN 可透過 Detectron2 的 `resume_or_load` 機制自動從最後的 checkpoint 繼續：
-```bash
-# 修改 train_maskrcnn.py 中的 resume=False → resume=True
-trainer.resume_or_load(resume=True)
-```
-
-**Q：GPU 記憶體不足（OOM）怎麼辦？**
-
-在對應的 config YAML 中調低 `batch_size`：
-```yaml
-# configs/deeplabv3_mobilenet.yaml
-training:
-  batch_size: 4  # 從 8 調低至 4
-```
-
-**Q：PP-LiteSeg / PIDNet 提示找不到模組？**
-
-確認 zh320 repo 已 clone 至專案根目錄：
-```bash
-git clone https://github.com/zh320/realtime-semantic-segmentation-pytorch
-# 確認目錄名稱為 realtime-semantic-segmentation-pytorch
-```
-
-**Q：Windows 執行 bat 腳本出現編碼錯誤？**
-
-設定 UTF-8 後再執行：
-```bat
-chcp 65001
-scripts\run_train_crackseg.bat
-```
-
----
-
-## Development Tools
-
-### Jupyter Lab
-
-用於執行 `notebooks/` 下的資料探索與結果視覺化筆記本。
+### Threshold sweep (find optimal inference threshold)
 
 ```bash
-conda activate CrackSeg
-jupyter lab --notebook-dir=notebooks --no-browser --port=8888
+python scripts/threshold_sweep.py --config configs/final/ppliteseg_v2.yaml
 ```
 
-開啟後在瀏覽器訪問：`http://localhost:8888`
-
-| Notebook | 用途 |
-|----------|------|
-| `01_data_exploration.ipynb` | 資料集統計與影像瀏覽 |
-| `02_patch_visualization.ipynb` | 512×512 patch 切分視覺化 |
-| `03_results_comparison.ipynb` | 四個模型評估結果比較 |
-
-### TensorBoard
-
-用於訓練時監控 loss 與 metrics 曲線。訓練腳本需先輸出 log 至 `outputs/runs/`。
+### Run inference + evaluation
 
 ```bash
-conda activate CrackSeg
-tensorboard --logdir=outputs/runs --port=6006
+# Generate predictions
+python evaluation/inference_crackseg.py --config configs/final/ppliteseg_v2.yaml
+
+# Compute metrics
+python evaluation/evaluate.py
+
+# Results
+cat outputs/results/metrics_summary.csv
 ```
-
-開啟後在瀏覽器訪問：`http://localhost:6006`
-
-> **注意**：需先執行訓練腳本產生 log 資料，TensorBoard 才有內容可顯示。
 
 ---
 
 ## Project Structure
 
 ```
-├── data/
-│   ├── dataset.py              # PyTorch Dataset: 512×512 patch extraction
-│   ├── transforms.py           # Albumentations augmentation pipelines
-│   ├── split.py                # 70/15/15 split generator
-│   └── splits/                 # Frozen split index files (committed to git)
-│       ├── train.txt
-│       ├── val.txt
-│       └── test.txt
-├── configs/
-│   ├── base.yaml               # Shared defaults
+├── configs/final/
+│   ├── ppliteseg.yaml              # PP-LiteSeg baseline (v0)
+│   ├── ppliteseg_v1.yaml           # PP-LiteSeg + DeepCrack
+│   ├── ppliteseg_v2.yaml           # PP-LiteSeg full merged dataset
+│   ├── ddrnet.yaml
 │   ├── deeplabv3_mobilenet.yaml
-│   ├── ppliteseg.yaml
-│   ├── pidnet.yaml
 │   └── maskrcnn.yaml
+├── data/
+│   ├── dataset.py                  # CrackDataset / PrecomputedCrackDataset
+│   ├── transforms.py               # Albumentations pipelines
+│   ├── splits/                     # v0 frozen splits (committed)
+│   ├── splits_v1/  splits_v2/      # merged splits (gitignored)
+│   ├── patches/                    # v0 patch cache (gitignored)
+│   ├── patches_v1/ patches_v2/     # merged patch cache (gitignored)
 ├── models/
-│   ├── deeplabv3_mobilenet.py        # torchvision wrapper, binary output
-│   └── losses.py               # BCEDiceLoss
+│   ├── deeplabv3_mobilenet.py
+│   └── losses.py                   # BCEDiceLoss, FocalTverskyLoss, FocalDiceLoss
 ├── training/
-│   ├── train_crackseg.py       # Unified trainer (DeepLabV3-MobileNetV3, PP-LiteSeg, PIDNet)
-│   ├── train_maskrcnn.py       # Detectron2 trainer (CrackPre env)
-│   └── lr_scheduler.py         # Warmup + cosine annealing
+│   ├── train_crackseg.py           # Unified trainer (all models)
+│   ├── train_maskrcnn_tv.py        # torchvision Mask R-CNN trainer
+│   └── lr_scheduler.py
 ├── evaluation/
-│   ├── metrics.py              # IoU, Dice, Precision, Recall
-│   ├── postprocess.py          # Skeletonization, crack length, continuity
-│   ├── inference_crackseg.py   # Generate PNG masks from CrackSeg models
-│   ├── inference_maskrcnn.py   # Generate PNG masks from Detectron2
-│   └── evaluate.py             # Env-agnostic unified evaluator → CSV
+│   ├── metrics.py                  # IoU, Dice, Precision, Recall, clDice
+│   ├── inference_crackseg.py
+│   ├── inference_maskrcnn_tv.py
+│   └── evaluate.py
 ├── scripts/
-│   ├── prepare_dataset.py      # Validate pairs, generate splits + COCO JSON
-│   ├── benchmark_fps.py        # FPS / latency benchmarking
-│   ├── run_train_crackseg.bat
-│   ├── run_train_maskrcnn.bat
-│   └── run_eval_all.bat
-├── notebooks/
-│   ├── 01_data_exploration.ipynb
-│   ├── 02_patch_visualization.ipynb
-│   └── 03_results_comparison.ipynb
-├── outputs/                    # gitignored — created at runtime
-│   ├── checkpoints/
-│   ├── predictions/
-│   ├── logs/
-│   ├── results/
-│   └── coco_annotations/
-├── concreteCrackSegmentationDataset/   # gitignored — must be downloaded manually
+│   ├── prepare_dataset.py          # Validate pairs, generate splits
+│   ├── prepare_external.py         # Merge external datasets
+│   ├── precompute_patches.py       # Build .npy patch cache
+│   ├── threshold_sweep.py          # Find optimal inference threshold
+│   ├── benchmark_loader.py         # DataLoader throughput benchmark
+│   └── benchmark_fps.py            # Model FPS benchmark
+├── concreteCrackSegmentationDataset/   # gitignored — place manually
+├── dataset_merged_v1/                  # gitignored — generated by prepare_external.py
+├── dataset_merged_v2/                  # gitignored — generated by prepare_external.py
+├── outputs/                            # gitignored — created at runtime
 ├── CrackSeg_env.yaml
-├── ComplateENV.yaml
 └── LICENSE
 ```
 
 ---
 
-## Training Configuration
+## Troubleshooting
 
-| Hyperparameter | PyTorch Models | Mask R-CNN |
-|----------------|---------------|------------|
-| Optimizer | AdamW | SGD |
-| Learning Rate | 1e-4 + cosine | 0.001 |
-| Batch Size | 8 | 2 |
-| Epochs | 100 + 5 warmup | 50 |
-| Loss | BCE + Dice | Cross-Entropy |
-
-## Evaluation Metrics
-
-- **Segmentation:** IoU (primary), Dice, Precision, Recall
-- **Efficiency:** FPS, inference time (ms), parameter count, model size
-- **Post-processing:** Skeletonization, crack length estimation, continuity analysis
-
----
-
-## Results
-
-| Model | Params | IoU | Dice | Precision | Recall | FPS |
-|-------|--------|-----|------|-----------|--------|-----|
-| Mask R-CNN | 44M | — | — | — | — | — |
-| DeepLabV3 (MobileNetV3-Large) | 11M | — | — | — | — | — |
-| DDRNet-23-slim | 5.6M | — | — | — | — | — |
-| PP-LiteSeg-T | 5M | — | — | — | — | — |
-
-*Results will be filled after experiments complete.*
+| Error | Fix |
+|-------|-----|
+| `CUDA out of memory` | Lower `batch_size` in config YAML |
+| `No module named 'models.losses'` in worker | Fixed — Windows multiprocessing requires PYTHONPATH propagation |
+| albumentations update warning | Harmless; set `NO_ALBUMENTATIONS_UPDATE=1` to suppress |
+| PP-LiteSeg/DDRNet import error | Clone zh320 repo to project root |
+| GPU utilization pulsing | Run `precompute_patches.py` first — eliminates CPU bottleneck |
 
 ---
 
 ## References
 
-- PP-LiteSeg: [ppliteseg.pdf](PP-LiteSeg.pdf)
-- Detectron2: [detectron2.pdf](detectron2.pdf)
 - zh320 Realtime Segmentation Repo: https://github.com/zh320/realtime-semantic-segmentation-pytorch
-- ABECIS Dataset: *(cite source here)*
+- DeepCrack: https://github.com/yhlleo/DeepCrack
+- CRACK500: https://github.com/fyangneil/pavement-crack-detection
 
 ## License
 
