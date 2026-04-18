@@ -1,21 +1,21 @@
 # ============================================================
-# PP-LiteSeg-T (STDC1) — MERGED DATASET (Mendeley + external)
+# PP-LiteSeg-T (STDC1) — MERGED DATASET v1
+# Mendeley (458) + DeepCrack (537)  →  total 995 images
+# train=857  val=68  test=70 (FROZEN)
 # ============================================================
-# Based on   : configs/final/ppliteseg.yaml  (original, IoU=0.4391)
-# Purpose    : Retrain with expanded dataset (DeepCrack / CRACK500)
-# Status     : 待訓練
+# Based on   : configs/final/ppliteseg.yaml  (baseline IoU=0.4391)
 #
-# Dataset preparation:
+# Prepare dataset:
 #   python scripts/prepare_external.py \
 #       --deepcrack_dir /path/to/DeepCrack \
-#       --crack500_dir  /path/to/CRACK500  \
-#       --output_root   concreteCrackSegmentationDataset_merged
+#       --output_root   dataset_merged_v1 \
+#       --output_splits_dir data/splits_v1
 #
 # Precompute patches:
-#   python scripts/precompute_patches.py --config configs/final/ppliteseg_merged.yaml
+#   python scripts/precompute_patches.py --config configs/final/ppliteseg_v1.yaml
 #
 # Train:
-#   python training/train_crackseg.py --config configs/final/ppliteseg_merged.yaml
+#   python training/train_crackseg.py --config configs/final/ppliteseg_v1.yaml
 # ============================================================
 
 model:
@@ -42,9 +42,9 @@ loss:
   dice_weight: 0.5
 
 dataset:
-  root: concreteCrackSegmentationDataset_merged   # ← merged dataset
-  splits_dir: data/splits_merged                  # ← merged splits (test FROZEN)
-  precomputed_dir: data/patches_merged            # ← new patch cache
+  root: dataset_merged_v1
+  splits_dir: data/splits_v1
+  precomputed_dir: data/patches_v1
   patch_size: 512
   overlap: 128
   num_workers: 4
@@ -55,12 +55,12 @@ dataset:
   positive_weight: 5.0
 
 checkpoint:
-  save_dir: outputs/checkpoints/ppliteseg_merged
+  save_dir: outputs/checkpoints/ppliteseg_v1
   save_best_metric: iou
   save_every_n_epochs: 10
 
 evaluation:
   metrics: [iou, dice, precision, recall, cldice]
-  threshold: 0.65                                 # sweep again after training
+  threshold: 0.65
   save_predictions: true
-  predictions_dir: outputs/predictions/ppliteseg_merged
+  predictions_dir: outputs/predictions/ppliteseg_v1

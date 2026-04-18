@@ -4,14 +4,24 @@
 #                + CFD (118) + GAPS384 (509)
 # Total: 3508 images  |  train=3380  val=68  test=70 (FROZEN)
 # ============================================================
-# Based on   : configs/final/ppliteseg_merged.yaml  (DeepCrack only, IoU=待訓練)
-# Purpose    : Expanded dataset — all usable external sources
+# Based on   : configs/final/ppliteseg_v1.yaml  (v1 IoU=待訓練)
+#
+# Prepare dataset:
+#   python scripts/prepare_external.py \
+#       --deepcrack_dir    /path/to/DeepCrack \
+#       --crack500_dir     /path/to/CRACK500/traincrop \
+#       --cfd_img_dir      /path/to/CFD/cfd_image \
+#       --cfd_mask_dir     /path/to/CFD/seg_gt \
+#       --gaps384_img_dir  /path/to/GAPS384/croppedimg \
+#       --gaps384_mask_dir /path/to/GAPS384/croppedgt \
+#       --output_root      dataset_merged_v2 \
+#       --output_splits_dir data/splits_v2
 #
 # Precompute patches:
-#   python scripts/precompute_patches.py --config configs/final/ppliteseg_merged_v2.yaml
+#   python scripts/precompute_patches.py --config configs/final/ppliteseg_v2.yaml
 #
 # Train:
-#   python training/train_crackseg.py --config configs/final/ppliteseg_merged_v2.yaml
+#   python training/train_crackseg.py --config configs/final/ppliteseg_v2.yaml
 # ============================================================
 
 model:
@@ -38,9 +48,9 @@ loss:
   dice_weight: 0.5
 
 dataset:
-  root: concreteCrackSegmentationDataset_merged_v2
-  splits_dir: data/splits_merged_v2
-  precomputed_dir: data/patches_merged_v2
+  root: dataset_merged_v2
+  splits_dir: data/splits_v2
+  precomputed_dir: data/patches_v2
   patch_size: 512
   overlap: 128
   num_workers: 4
@@ -51,7 +61,7 @@ dataset:
   positive_weight: 5.0
 
 checkpoint:
-  save_dir: outputs/checkpoints/ppliteseg_merged_v2
+  save_dir: outputs/checkpoints/ppliteseg_v2
   save_best_metric: iou
   save_every_n_epochs: 10
 
@@ -59,4 +69,4 @@ evaluation:
   metrics: [iou, dice, precision, recall, cldice]
   threshold: 0.65
   save_predictions: true
-  predictions_dir: outputs/predictions/ppliteseg_merged_v2
+  predictions_dir: outputs/predictions/ppliteseg_v2

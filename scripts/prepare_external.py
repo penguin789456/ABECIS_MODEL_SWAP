@@ -405,8 +405,8 @@ def main() -> None:
         help="Existing split files to use as base (default: data/splits)"
     )
     parser.add_argument(
-        "--output_splits_dir", default="data/splits_merged",
-        help="Where to write merged split files (default: data/splits_merged)"
+        "--output_splits_dir", default="data/splits_v1",
+        help="Where to write merged split files (default: data/splits_v1)"
     )
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
