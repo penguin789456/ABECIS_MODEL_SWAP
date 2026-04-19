@@ -1,0 +1,69 @@
+# ============================================================
+# PP-LiteSeg-T (STDC1) — MERGED DATASET v1 + BCEDiceLoss pos_weight
+# Mendeley (458) + DeepCrack (537)  →  train=857  val=68  test=70
+# ============================================================
+# Goal: Push Recall from 0.41 → 0.55+ without all-positive collapse
+#
+# Problem with plain BCEDiceLoss (ppliteseg_v1, 108 epochs):
+#   - Recall stuck at 0.40–0.42 (model overly conservative)
+#   - Best val IoU 0.3761 @ threshold=0.65
+#   - Root cause: equal FN/FP penalty on 97% background data
+#
+# Problem with FocalTverskyLoss β=0.7 (ppliteseg_v1_ftl, 7 epochs):
+#   - All-positive collapse: Precision=0.015, Recall=0.84, IoU=0.016
+#   - β=0.7 too aggressive for ~1-3% crack pixel ratio
+#
+# Fix: BCEDiceLoss with pos_weight=3.0
+#   - pos_weight=3.0 means missing a crack pixel costs 3× more than a false alarm
+#   - Directly targets the FN/FP imbalance in the BCE gradient
+#   - Stable: each pixel still has individual loss, no all-positive collapse
+#   - Expected: Recall 0.41 → 0.50–0.58, val IoU 0.376 → 0.42–0.46
+# ============================================================
+
+model:
+  name: ppliteseg
+  backbone: STDC1
+  pretrained: true
+  num_classes: 1
+  zh320_config: realtime-semantic-segmentation-pytorch/configs/ppliteseg_stdc1.py
+
+training:
+  optimizer: adamw
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  batch_size: 32
+  epochs: 150
+  warmup_epochs: 5
+  scheduler: cosine
+  seed: 42
+  output_dir: outputs
+
+loss:
+  type: bce_dice
+  bce_weight: 0.5
+  dice_weight: 0.5
+  pos_weight: 3.0   # crack pixel missed costs 3× more than a false alarm
+
+dataset:
+  root: dataset_merged_v1
+  splits_dir: data/splits_v1
+  precomputed_dir: data/patches_v1
+  patch_size: 512
+  overlap: 128
+  num_workers: 4
+  prefetch_factor: 4
+  pin_memory: true
+  persistent_workers: true
+  oversample_positive: true
+  positive_weight: 5.0
+
+checkpoint:
+  save_dir: outputs/checkpoints/ppliteseg_v1_bce_pw
+  save_best_metric: iou
+  save_every_n_epochs: 10
+
+evaluation:
+  metrics: [iou, dice, precision, recall, cldice]
+  threshold: 0.65   # start with proven optimal; sweep after training
+  save_predictions: true
+  predictions_dir: outputs/predictions/ppliteseg_v1_bce_pw
