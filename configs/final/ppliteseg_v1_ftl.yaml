@@ -1,0 +1,69 @@
+# ============================================================
+# PP-LiteSeg-T (STDC1) — MERGED DATASET v1 + FocalTverskyLoss
+# Mendeley (458) + DeepCrack (537)  →  train=857  val=68  test=70
+# ============================================================
+# Goal: Break loss-saturation plateau and push Recall ≥ 0.55
+#
+# Problem with BCEDiceLoss (ppliteseg_v1):
+#   - val_loss delta across 108 epochs: only 0.007
+#   - Recall stuck at 0.40–0.42 (model overly conservative)
+#   - Sigmoid output cliff: threshold 0.10–0.50 → IoU≈0.013
+#   - Best val IoU 0.3761 @ threshold=0.65
+#
+# FocalTverskyLoss rationale:
+#   - alpha=0.3 (light FP penalty)  → tolerate some false alarms
+#   - beta=0.7  (heavy FN penalty)  → force Recall up
+#   - gamma=0.75 (focal exponent)   → harder pixels get larger gradient
+#   - Tversky loss changes the output distribution; use threshold=0.50 as start
+#
+# After training run threshold sweep to find optimal threshold:
+#   python scripts/threshold_sweep.py --config configs/final/ppliteseg_v1_ftl.yaml
+# ============================================================
+
+model:
+  name: ppliteseg
+  backbone: STDC1
+  pretrained: true
+  num_classes: 1
+  zh320_config: realtime-semantic-segmentation-pytorch/configs/ppliteseg_stdc1.py
+
+training:
+  optimizer: adamw
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  batch_size: 32
+  epochs: 150
+  warmup_epochs: 5
+  scheduler: cosine
+  seed: 42
+  output_dir: outputs
+
+loss:
+  type: focal_tversky
+  alpha: 0.3    # FP weight — lenient on false alarms
+  beta:  0.7    # FN weight — strict on missed cracks → Recall up
+  gamma: 0.75   # focal exponent — harder pixels dominate gradient
+
+dataset:
+  root: dataset_merged_v1
+  splits_dir: data/splits_v1
+  precomputed_dir: data/patches_v1
+  patch_size: 512
+  overlap: 128
+  num_workers: 4
+  prefetch_factor: 4
+  pin_memory: true
+  persistent_workers: true
+  oversample_positive: true
+  positive_weight: 5.0
+
+checkpoint:
+  save_dir: outputs/checkpoints/ppliteseg_v1_ftl
+  save_best_metric: iou
+  save_every_n_epochs: 10
+
+evaluation:
+  metrics: [iou, dice, precision, recall, cldice]
+  threshold: 0.50   # FTL shifts output distribution; sweep after training
+  save_predictions: true
+  predictions_dir: outputs/predictions/ppliteseg_v1_ftl
