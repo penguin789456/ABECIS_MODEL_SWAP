@@ -1,28 +1,26 @@
 """
-DDRNet FTL TorchScript Whole-image 推論腳本
-公開套件部署版：不依賴 training.train_crackseg.build_model / data.transforms.get_test_transforms
+DeepLabV3-MobileNetV3 TorchScript Whole-image 推論腳本 — CFD 資料集
 
 功能：
-  1. 直接載入 TorchScript 模型：ddrnet_ftl_torchscript.pt
-  2. 直接讀取整個 RGB 資料夾內所有 .jpg/.jpeg/.png 圖片
-  3. whole-image inference：不切 patch
-  4. 統一 resize 到指定 target-size，例如 1024x1024
-  5. 輸出 before / after 疊圖
-  6. 輸出整體 log
-  7. 每張圖片詳細結果輸出 CSV
-  8. log / csv 檔名會標示 cpu 或 gpu
-  9. 記錄 CPU / RAM / GPU VRAM 資源消耗
+  1. 載入 TorchScript 模型：deeplabv3_torchscript.pt
+  2. 讀取 CFD 完全未見資料集所有圖片
+  3. whole-image inference：resize 1024x1024，不切 patch
+  4. 輸出 before / after 疊圖、純二值 pred_mask
+  5. log / csv 檔名加 timestamp 避免覆蓋
 
 啟動方式：
   conda activate CrackSeg
   cd H:\ChihleeMaster\dev\ABECIS_MODEL_SWAP
-  python ddrnet_cfd_infernce.py --device cpu
+  python "H:\ChihleeMaster\dev\final_outputs\infernce\deeplabv3_cfd_infernce.py" --device cuda
+  python "H:\ChihleeMaster\dev\final_outputs\infernce\deeplabv3_cfd_infernce.py" --device cpu
 
-GPU：
-  python ddrnet_cfd_infernce.py --device cuda
-
-指定輸入尺寸與閾值：
-  python ddrnet_cfd_infernce.py --target-size 1024 1024 --threshold 0.8 --device cpu
+輸出：
+  H:\ChihleeMaster\dev\final_outputs\
+    logs\deeplabv3_cfd\{gpu|cpu}\inference_log_{timestamp}.txt
+    logs\deeplabv3_cfd\{gpu|cpu}\per_image_{timestamp}.csv
+    before\deeplabv3_cfd\{gpu|cpu}\*.png
+    after\deeplabv3_cfd\{gpu|cpu}\*.png
+    pred_masks\deeplabv3_cfd\{gpu|cpu}\*.png
 """
 
 import os
@@ -45,28 +43,17 @@ from torchvision import transforms
 
 # ── 路徑設定 ────────────────────────────────────────────────────────────────
 MODEL_PATH = Path(
-    r"H:\ChihleeMaster\dev\ABECIS_MODEL_SWAP\outputs\checkpoints\ddrnet_ftl\ddrnet_ftl_torchscript.pt"
+    r"H:\ChihleeMaster\dev\ABECIS_MODEL_SWAP\outputs\checkpoints\deeplabv3_mobilenet\deeplabv3_torchscript.pt"
 )
 
-# ⚠️ 使用完全未見資料集（CFD），避免資料洩漏
-# CFD 資料集從未用於 DDRNet FTL 訓練（訓練僅使用 v0 Mendeley 資料集）
-RGB_DIR = Path(
-    r"H:\ChihleeMaster\CrackK500\CFD\cfd_image"
-)
+# CFD 完全未見資料集
+RGB_DIR = Path(r"H:\ChihleeMaster\CrackK500\CFD\cfd_image")
+OUT_BASE = Path(r"H:\ChihleeMaster\dev\final_outputs")
+MODEL_NAME = "deeplabv3_cfd"
 
-OUT_BASE = Path(
-    r"H:\ChihleeMaster\dev\final_outputs"
-)
-
-MODEL_NAME = "ddrnet_ftl_torchscript_whole_cfd"
-
-
-# ── Normalize 設定 ──────────────────────────────────────────────────────────
-# 你的原本 data/transforms.py 使用 ImageNet mean/std：
-# _MEAN = (0.485, 0.456, 0.406)
-# _STD  = (0.229, 0.224, 0.225)
+# ImageNet mean/std（與訓練時 data/transforms.py 一致）
 DEFAULT_MEAN = [0.485, 0.456, 0.406]
-DEFAULT_STD = [0.229, 0.224, 0.225]
+DEFAULT_STD  = [0.229, 0.224, 0.225]
 
 
 # ── psutil 可選資源監控 ─────────────────────────────────────────────────────
@@ -83,7 +70,6 @@ def bytes_to_mb(value: int) -> float:
 
 
 def get_cpu_name() -> str:
-    """盡量取得 CPU 型號。Windows 優先使用 wmic，失敗則回傳 platform 資訊。"""
     try:
         if platform.system().lower() == "windows":
             out = subprocess.check_output(
@@ -92,15 +78,13 @@ def get_cpu_name() -> str:
                 text=True,
             )
             lines = [
-                x.strip()
-                for x in out.splitlines()
+                x.strip() for x in out.splitlines()
                 if x.strip() and x.strip().lower() != "name"
             ]
             if lines:
                 return lines[0]
     except Exception:
         pass
-
     cpu = platform.processor()
     return cpu if cpu else platform.machine()
 
@@ -108,11 +92,9 @@ def get_cpu_name() -> str:
 def select_device(device_arg: str) -> torch.device:
     if device_arg == "auto":
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     if device_arg == "cuda" and not torch.cuda.is_available():
         print("⚠️ 指定 cuda，但目前 CUDA 不可用，改用 CPU。")
         return torch.device("cpu")
-
     return torch.device(device_arg)
 
 
@@ -125,13 +107,11 @@ def get_device_info(device: torch.device) -> dict:
         "gpu_name": "N/A",
         "gpu_total_memory_gb": "N/A",
     }
-
     if device.type == "cuda" and torch.cuda.is_available():
         idx = torch.cuda.current_device()
         prop = torch.cuda.get_device_properties(idx)
         info["gpu_name"] = torch.cuda.get_device_name(idx)
         info["gpu_total_memory_gb"] = f"{prop.total_memory / (1024 ** 3):.2f} GB"
-
     return info
 
 
@@ -150,127 +130,72 @@ def get_resource_snapshot(device: torch.device) -> dict:
         "gpu_max_allocated_mb": 0.0,
         "gpu_max_reserved_mb": 0.0,
     }
-
     if PSUTIL_AVAILABLE:
         proc = psutil.Process(os.getpid())
         snapshot["process_ram_mb"] = bytes_to_mb(proc.memory_info().rss)
         snapshot["process_cpu_percent"] = proc.cpu_percent(interval=None)
-
     if device.type == "cuda" and torch.cuda.is_available():
         snapshot["gpu_allocated_mb"] = bytes_to_mb(torch.cuda.memory_allocated())
         snapshot["gpu_reserved_mb"] = bytes_to_mb(torch.cuda.memory_reserved())
         snapshot["gpu_max_allocated_mb"] = bytes_to_mb(torch.cuda.max_memory_allocated())
         snapshot["gpu_max_reserved_mb"] = bytes_to_mb(torch.cuda.max_memory_reserved())
-
     return snapshot
 
 
 def build_preprocess(mean, std):
-    """
-    使用 torchvision 公開套件取代原本 get_test_transforms()。
-    原本流程等價於：
-      Normalize(ImageNet mean/std) + ToTensor
-    """
     return transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize(mean=mean, std=std),
     ])
 
 
-def overlay_mask(
-    rgb: np.ndarray,
-    mask: np.ndarray,
-    color=(220, 50, 50),
-    alpha=0.5,
-) -> np.ndarray:
-    """mask 白色區域疊合紅色到原始影像上"""
+def overlay_mask(rgb: np.ndarray, mask: np.ndarray,
+                 color=(220, 50, 50), alpha=0.5) -> np.ndarray:
     out = rgb.copy().astype(np.float32)
     crack = mask >= 128
-
     for c, v in enumerate(color):
         out[:, :, c] = np.where(
             crack,
             out[:, :, c] * (1 - alpha) + v * alpha,
             out[:, :, c],
         )
-
     return out.clip(0, 255).astype(np.uint8)
 
 
 def normalize_model_output(output: torch.Tensor) -> torch.Tensor:
-    """
-    將 TorchScript 模型輸出整理成 [H, W] logit。
-
-    你的匯出測試輸出是：
-      (1, 1, 1024, 1024)
-
-    因此正常會走：
-      [B, C, H, W] -> [H, W]
-    """
     if isinstance(output, (tuple, list)):
         output = output[0]
-
     if isinstance(output, dict):
         for key in ["out", "logits", "pred", "mask"]:
             if key in output:
                 output = output[key]
                 break
         else:
-            raise ValueError(f"模型輸出為 dict，但找不到可用 key：{list(output.keys())}")
-
+            raise ValueError(f"模型輸出為 dict，找不到可用 key：{list(output.keys())}")
     if output.dim() == 4:
-        # [B, C, H, W]
-        if output.shape[1] == 1:
-            output = output[:, 0, :, :]
-        else:
-            # 若未來是多類別，這裡可改成 output[:, crack_class_id, :, :]
-            output = output[:, 0, :, :]
-
+        output = output[:, 0, :, :]
     if output.dim() == 3:
-        # [B, H, W]
         output = output[0]
-
     if output.dim() != 2:
         raise ValueError(f"不支援的模型輸出 shape：{tuple(output.shape)}")
-
     return output
 
 
 def load_torchscript_model(model_path: Path, device: torch.device):
     if not model_path.exists():
         raise FileNotFoundError(f"找不到 TorchScript 模型：{model_path}")
-
     model = torch.jit.load(str(model_path), map_location=device)
     model.eval()
     return model
 
 
-def infer_whole_image(
-    image: np.ndarray,
-    model,
-    device: torch.device,
-    preprocess,
-    threshold: float,
-    target_size: tuple[int, int],
-) -> np.ndarray:
-    """
-    整張影像推論，不切 patch。
-
-    流程：
-      1. 原圖 resize 到 target_size
-      2. ToTensor + Normalize
-      3. TorchScript DDRNet 推論
-      4. sigmoid + threshold
-      5. mask resize 回原圖大小
-    """
+def infer_whole_image(image: np.ndarray, model, device: torch.device,
+                      preprocess, threshold: float,
+                      target_size: tuple) -> np.ndarray:
     original_h, original_w = image.shape[:2]
     target_w, target_h = target_size
 
-    pil_resized = Image.fromarray(image).resize(
-        (target_w, target_h),
-        Image.BILINEAR,
-    )
-
+    pil_resized = Image.fromarray(image).resize((target_w, target_h), Image.BILINEAR)
     tensor = preprocess(pil_resized).unsqueeze(0).float().to(device)
 
     with torch.no_grad():
@@ -288,26 +213,19 @@ def infer_whole_image(
         prob = torch.sigmoid(logit)
         mask = (prob > threshold).to(torch.uint8).cpu().numpy() * 255
 
-    mask = Image.fromarray(mask).resize(
-        (original_w, original_h),
-        Image.NEAREST,
-    )
-
+    mask = Image.fromarray(mask).resize((original_w, original_h), Image.NEAREST)
     return np.array(mask)
 
 
-def list_rgb_files(rgb_dir: Path) -> list[Path]:
+def list_rgb_files(rgb_dir: Path) -> list:
     if not rgb_dir.exists():
         raise FileNotFoundError(f"找不到 RGB 資料夾：{rgb_dir}")
-
     files = sorted([
         p for p in rgb_dir.iterdir()
         if p.suffix.lower() in (".jpg", ".jpeg", ".png")
     ])
-
     if not files:
-        raise FileNotFoundError(f"RGB 資料夾內找不到 jpg/jpeg/png 圖片：{rgb_dir}")
-
+        raise FileNotFoundError(f"找不到圖片：{rgb_dir}")
     return files
 
 
@@ -315,59 +233,22 @@ def main():
     program_start = time.perf_counter()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model-path",
-        type=str,
-        default=str(MODEL_PATH),
-        help="TorchScript DDRNet 模型路徑",
-    )
-    parser.add_argument(
-        "--rgb-dir",
-        type=str,
-        default=str(RGB_DIR),
-        help="RGB 圖片資料夾，會直接讀取整個資料夾",
-    )
-    parser.add_argument(
-        "--threshold",
-        type=float,
-        default=0.8,
-        help="裂縫判定 threshold，預設 0.8",
-    )
-    parser.add_argument(
-        "--target-size",
-        type=int,
-        nargs=2,
-        default=[1024, 1024],
-        metavar=("WIDTH", "HEIGHT"),
-        help="whole-image 推論前 resize 尺寸，例如 --target-size 1024 1024",
-    )
-    parser.add_argument(
-        "--device",
-        choices=["auto", "cpu", "cuda"],
-        default="auto",
-        help="運算裝置：auto / cpu / cuda",
-    )
-    parser.add_argument(
-        "--mean",
-        type=float,
-        nargs=3,
-        default=DEFAULT_MEAN,
-        help="Normalize mean，預設 ImageNet mean",
-    )
-    parser.add_argument(
-        "--std",
-        type=float,
-        nargs=3,
-        default=DEFAULT_STD,
-        help="Normalize std，預設 ImageNet std",
-    )
+    parser.add_argument("--model-path", type=str, default=str(MODEL_PATH))
+    parser.add_argument("--rgb-dir", type=str, default=str(RGB_DIR))
+    parser.add_argument("--threshold", type=float, default=0.8,
+                        help="裂縫判定 threshold，預設 0.8")
+    parser.add_argument("--target-size", type=int, nargs=2, default=[1024, 1024],
+                        metavar=("WIDTH", "HEIGHT"))
+    parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
+    parser.add_argument("--mean", type=float, nargs=3, default=DEFAULT_MEAN)
+    parser.add_argument("--std",  type=float, nargs=3, default=DEFAULT_STD)
     args = parser.parse_args()
 
-    model_path = Path(args.model_path)
-    rgb_dir = Path(args.rgb_dir)
-    threshold = args.threshold
+    model_path  = Path(args.model_path)
+    rgb_dir     = Path(args.rgb_dir)
+    threshold   = args.threshold
     target_size = tuple(args.target_size)
-    device = select_device(args.device)
+    device      = select_device(args.device)
     device_info = get_device_info(device)
     device_suffix = "gpu" if device.type == "cuda" else "cpu"
 
@@ -398,14 +279,13 @@ def main():
     rgb_files = list_rgb_files(rgb_dir)
 
     log_lines = [
-        "DDRNet FTL TorchScript Whole-image 推論記錄",
+        f"DeepLabV3-MobileNetV3 TorchScript Whole-image 推論記錄 — CFD",
         f"時間        : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"模型名稱    : {MODEL_NAME}",
         f"模型檔案    : {model_path}",
         f"測試圖片來源 : {rgb_dir}",
         "資料集      : CFD（Crack Forest Dataset）— 完全未見資料集，無資料洩漏",
-        "讀取方式    : 直接讀取資料夾內所有 jpg/jpeg/png 圖片",
         f"閾值        : {threshold}",
-        "信心度設定  : 0.8（預設；可用 --threshold 覆蓋）",
         f"輸入尺寸    : {target_size[0]}x{target_size[1]}",
         f"影像數      : {len(rgb_files)}",
         f"輸出目錄    : {OUT_BASE}",
@@ -423,53 +303,35 @@ def main():
     ]
 
     csv_rows = []
-
-    success_count = 0
-    fail_count = 0
-    crack_image_count = 0
-    no_crack_image_count = 0
-    total_crack_px = 0
-
-    coverage_list = []
-    elapsed_list = []
-    ram_list = []
-    cpu_percent_list = []
-    gpu_allocated_list = []
-    gpu_reserved_list = []
+    success_count = fail_count = crack_image_count = no_crack_image_count = total_crack_px = 0
+    coverage_list, elapsed_list = [], []
+    ram_list, cpu_percent_list = [], []
+    gpu_allocated_list, gpu_reserved_list = [], []
 
     print(f"Processing {len(rgb_files)} images...")
     inference_start = time.perf_counter()
 
-    for rgb_p in tqdm(rgb_files, desc="DDRNet TorchScript Whole"):
+    for rgb_p in tqdm(rgb_files, desc=f"{MODEL_NAME}"):
         stem = rgb_p.stem
-
         try:
             item_start = time.perf_counter()
-
             rgb = np.array(Image.open(rgb_p).convert("RGB"))
 
             mask = infer_whole_image(
-                image=rgb,
-                model=model,
-                device=device,
-                preprocess=preprocess,
-                threshold=threshold,
+                image=rgb, model=model, device=device,
+                preprocess=preprocess, threshold=threshold,
                 target_size=target_size,
             )
 
             shutil.copy(str(rgb_p), before_dir / f"{stem}.png")
-
-            # 儲存純二值 mask（供 GT 評估使用）
             Image.fromarray(mask).save(pred_masks_dir / f"{stem}.png")
-
             overlay = overlay_mask(rgb, mask)
             Image.fromarray(overlay).save(after_dir / f"{stem}.png")
 
             crack_px = int((mask >= 128).sum())
             coverage = crack_px / (mask.shape[0] * mask.shape[1]) * 100.0
-            judged = "有裂縫" if crack_px > 0 else "無裂縫"
-
-            elapsed = time.perf_counter() - item_start
+            judged   = "有裂縫" if crack_px > 0 else "無裂縫"
+            elapsed  = time.perf_counter() - item_start
             resource_now = get_resource_snapshot(device)
 
             success_count += 1
@@ -503,37 +365,30 @@ def main():
         except Exception as e:
             fail_count += 1
             csv_rows.append({
-                "image_id": stem,
-                "filename": rgb_p.name,
+                "image_id": stem, "filename": rgb_p.name,
                 "status": f"FAILED: {type(e).__name__}: {e}",
-                "crack_pixels": "",
-                "coverage_percent": "",
-                "judgement": "",
-                "elapsed_sec": "",
-                "process_ram_mb": "",
-                "process_cpu_percent": "",
-                "gpu_allocated_mb": "",
-                "gpu_reserved_mb": "",
+                "crack_pixels": "", "coverage_percent": "", "judgement": "",
+                "elapsed_sec": "", "process_ram_mb": "", "process_cpu_percent": "",
+                "gpu_allocated_mb": "", "gpu_reserved_mb": "",
             })
 
     inference_elapsed = time.perf_counter() - inference_start
-    program_elapsed = time.perf_counter() - program_start
-    resource_end = get_resource_snapshot(device)
+    program_elapsed   = time.perf_counter() - program_start
+    resource_end      = get_resource_snapshot(device)
 
-    judge_rate = (crack_image_count / success_count * 100.0) if success_count > 0 else 0.0
+    judge_rate   = (crack_image_count / success_count * 100.0) if success_count > 0 else 0.0
     avg_coverage = float(np.mean(coverage_list)) if coverage_list else 0.0
-    avg_time = float(np.mean(elapsed_list)) if elapsed_list else 0.0
-    min_time = float(np.min(elapsed_list)) if elapsed_list else 0.0
-    max_time = float(np.max(elapsed_list)) if elapsed_list else 0.0
-
-    avg_ram = float(np.mean(ram_list)) if ram_list else 0.0
-    peak_ram = float(np.max(ram_list)) if ram_list else 0.0
-    avg_cpu = float(np.mean(cpu_percent_list)) if cpu_percent_list else 0.0
-    peak_cpu = float(np.max(cpu_percent_list)) if cpu_percent_list else 0.0
-    avg_gpu_allocated = float(np.mean(gpu_allocated_list)) if gpu_allocated_list else 0.0
-    peak_gpu_allocated = float(np.max(gpu_allocated_list)) if gpu_allocated_list else 0.0
-    avg_gpu_reserved = float(np.mean(gpu_reserved_list)) if gpu_reserved_list else 0.0
-    peak_gpu_reserved = float(np.max(gpu_reserved_list)) if gpu_reserved_list else 0.0
+    avg_time     = float(np.mean(elapsed_list))  if elapsed_list  else 0.0
+    min_time     = float(np.min(elapsed_list))   if elapsed_list  else 0.0
+    max_time     = float(np.max(elapsed_list))   if elapsed_list  else 0.0
+    avg_ram      = float(np.mean(ram_list))      if ram_list      else 0.0
+    peak_ram     = float(np.max(ram_list))       if ram_list      else 0.0
+    avg_cpu      = float(np.mean(cpu_percent_list))  if cpu_percent_list  else 0.0
+    peak_cpu     = float(np.max(cpu_percent_list))   if cpu_percent_list  else 0.0
+    avg_gpu_alloc  = float(np.mean(gpu_allocated_list)) if gpu_allocated_list else 0.0
+    peak_gpu_alloc = float(np.max(gpu_allocated_list))  if gpu_allocated_list else 0.0
+    avg_gpu_res    = float(np.mean(gpu_reserved_list))  if gpu_reserved_list  else 0.0
+    peak_gpu_res   = float(np.max(gpu_reserved_list))   if gpu_reserved_list  else 0.0
 
     log_lines += [
         "整體統計",
@@ -558,32 +413,24 @@ def main():
         f"峰值 Process RAM   : {peak_ram:.2f} MB",
         f"平均 Process CPU   : {avg_cpu:.2f}%",
         f"峰值 Process CPU   : {peak_cpu:.2f}%",
-        f"平均 GPU allocated : {avg_gpu_allocated:.2f} MB",
-        f"峰值 GPU allocated : {peak_gpu_allocated:.2f} MB",
-        f"平均 GPU reserved  : {avg_gpu_reserved:.2f} MB",
-        f"峰值 GPU reserved  : {peak_gpu_reserved:.2f} MB",
+        f"平均 GPU allocated : {avg_gpu_alloc:.2f} MB",
+        f"峰值 GPU allocated : {peak_gpu_alloc:.2f} MB",
+        f"平均 GPU reserved  : {avg_gpu_res:.2f} MB",
+        f"峰值 GPU reserved  : {peak_gpu_res:.2f} MB",
         f"PyTorch GPU peak allocated : {resource_end['gpu_max_allocated_mb']:.2f} MB",
         f"PyTorch GPU peak reserved  : {resource_end['gpu_max_reserved_mb']:.2f} MB",
         "-" * 100,
-        f"before 目錄: {before_dir}",
-        f"after  目錄: {after_dir}",
-        f"CSV 檔案   : {csv_path}",
+        f"before 目錄    : {before_dir}",
+        f"after  目錄    : {after_dir}",
+        f"pred_masks 目錄: {pred_masks_dir}",
+        f"CSV 檔案       : {csv_path}",
     ]
 
     csv_fields = [
-        "image_id",
-        "filename",
-        "status",
-        "crack_pixels",
-        "coverage_percent",
-        "judgement",
-        "elapsed_sec",
-        "process_ram_mb",
-        "process_cpu_percent",
-        "gpu_allocated_mb",
-        "gpu_reserved_mb",
+        "image_id", "filename", "status", "crack_pixels", "coverage_percent",
+        "judgement", "elapsed_sec", "process_ram_mb", "process_cpu_percent",
+        "gpu_allocated_mb", "gpu_reserved_mb",
     ]
-
     with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=csv_fields)
         writer.writeheader()
@@ -593,7 +440,7 @@ def main():
         f.write("\n".join(log_lines))
 
     print("\n✅ 完成")
-    print(f"   logs      → {log_path}")
+    print(f"   log       → {log_path}")
     print(f"   csv       → {csv_path}")
     print(f"   before    → {before_dir}")
     print(f"   after     → {after_dir}")

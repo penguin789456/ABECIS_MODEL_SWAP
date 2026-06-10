@@ -41,12 +41,11 @@ from detectron2.utils.logger import setup_logger
 setup_logger()
 
 # ── 設定 ────────────────────────────────────────────────────────────────────
-# ⚠️ 使用完全未見資料集（CFD），避免資料洩漏
-# CFD 資料集從未用於 ABECIS Detectron2 訓練
-RGB_DIR    = r'H:\ChihleeMaster\CrackK500\CFD\cfd_image'
-SPLITS     = None  # 不使用 test.txt，直接讀取整個 RGB_DIR 資料夾
+# Mendeley 凍結測試集（70 張，與其他模型相同 test.txt）
+RGB_DIR    = r'H:\ChihleeMaster\dev\ABECIS_MODEL_SWAP\concreteCrackSegmentationDataset\rgb'
+TEST_SPLIT = r'H:\ChihleeMaster\dev\ABECIS_MODEL_SWAP\data\splits\test.txt'
 OUT_BASE   = Path(r'H:\ChihleeMaster\dev\final_outputs')
-MODEL_NAME = 'abecis_detectron2_whole_cfd'
+MODEL_NAME = 'abecis_mendeley'
 
 
 def get_cpu_name() -> str:
@@ -235,13 +234,16 @@ def main():
     reset_gpu_peak_memory(device)
     resource_start = get_process_resource_snapshot(device)
 
-    rgb_files = sorted([
-        p for p in Path(RGB_DIR).iterdir()
-        if p.suffix.lower() in (".jpg", ".jpeg", ".png")
-    ])
-    stems = [p.stem for p in rgb_files]
+    # ── 讀 Mendeley 凍結測試集（test.txt 70 張）────────────────────────────
+    stems_raw = [l.strip() for l in Path(TEST_SPLIT).read_text(encoding="utf-8").splitlines() if l.strip()]
+    stems = [s.zfill(3) if s.isdigit() else s for s in stems_raw]
 
-    rgb_index = {Path(p).stem.lower(): str(p) for p in rgb_files}
+    rgb_all = {
+        p.stem.lower(): p
+        for p in Path(RGB_DIR).iterdir()
+        if p.suffix.lower() in (".jpg", ".jpeg", ".png")
+    }
+    rgb_index = {s.lower(): str(rgb_all[s.lower()]) for s in stems if s.lower() in rgb_all}
 
     log_path = log_dir / f"inference_log_{ts}.txt"
     csv_path = log_dir / f"per_image_{ts}.csv"
@@ -255,8 +257,8 @@ def main():
         f"輸入尺寸    : {target_w}x{target_h}",
         f"影像數      : {len(stems)}",
         f"測試 RGB 來源 : {RGB_DIR}",
-        "資料集      : CFD（Crack Forest Dataset）— 完全未見資料集，無資料洩漏",
-        f"讀取方式    : 直接讀取資料夾內所有 jpg/jpeg/png 圖片",
+        "資料集      : Mendeley CCSD — 凍結測試集（70 張，test.txt）",
+        f"讀取方式    : 依 data/splits/test.txt 讀取指定 70 張",
         f"輸出目錄    : {OUT_BASE}",
         f"運算裝置    : {device_info['device']}",
         f"CPU         : {device_info['cpu_name']}",
