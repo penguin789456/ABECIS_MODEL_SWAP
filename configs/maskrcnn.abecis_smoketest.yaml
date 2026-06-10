@@ -1,0 +1,34 @@
+﻿model:
+  name: maskrcnn
+  config_file: COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml
+  pretrained_weights: detectron2://ImageNetPretrained/MSRA/R-50.pkl
+
+training:
+  optimizer: sgd
+  lr: 0.001
+  momentum: 0.9
+  weight_decay: 1.0e-4
+  batch_size: 2
+  max_iter: 2
+  warmup_iters: 1
+  lr_steps: [1]
+  seed: 42
+  output_dir: outputs
+
+dataset:
+  root: concreteCrackSegmentationDataset
+  splits_dir: data/splits
+  coco_annotations_dir: outputs/coco_annotations
+
+dataset_detectron2:
+  thing_classes: ["crack"]
+  mask_format: bitmask
+
+checkpoint:
+  save_dir: outputs/checkpoints/maskrcnn_abecis_smoketest
+  eval_period: 1
+
+evaluation:
+  metrics: [iou, dice, precision, recall]
+  save_predictions: false
+  predictions_dir: outputs/predictions/maskrcnn_abecis_smoketest

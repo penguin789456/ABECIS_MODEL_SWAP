@@ -210,6 +210,7 @@ __marimo__/
 concreteCrackSegmentationDataset/
 dataset_merged_v1/
 dataset_merged_v2/
+dataset_merged_v3/
 PP-LiteSeg.pdf
 detectron2.pdf
 
@@ -217,12 +218,15 @@ detectron2.pdf
 data/patches/
 data/patches_v1/
 data/patches_v2/
+data/patches_v3/
 data/splits_merged/
 data/splits_v1/
 data/splits_v2/
+data/splits_v3/
 
 # Claude Code worktrees (temporary agent workspaces)
 .claude/worktrees/
+.claude/scheduled_tasks.lock
 
 # Jupyter scratch notebooks
 notebooks/Untitled*.ipynb

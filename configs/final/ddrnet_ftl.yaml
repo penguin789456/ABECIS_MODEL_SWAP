@@ -1,0 +1,59 @@
+# ============================================================
+# DDRNet-23-slim — Focal Tversky Loss 實驗
+# ============================================================
+# 目的：提升裂縫區域偵測率，與 BCEDice 版本比較
+#
+# BCEDice 版本結果（150 epochs）:
+#   IoU=0.3912  Prec=0.713  Rec=0.464  偵測率=63.5% (@thresh=0.35)
+#   最大偵測率=72.9% (@thresh=0.05)
+#
+# FTL 設定：alpha=0.2（容忍FP）, beta=0.8（強懲罰FN）
+#   → 強制模型提升 Recall，找到更多裂縫區域
+# ============================================================
+
+model:
+  name: ddrnet
+  arch_type: DDRNet-23-slim
+  pretrained: false
+  num_classes: 1
+
+training:
+  optimizer: adamw
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  batch_size: 32
+  epochs: 150
+  warmup_epochs: 5
+  scheduler: cosine
+  seed: 42
+  output_dir: outputs
+
+loss:
+  type: focal_tversky
+  alpha: 0.2     # FP 懲罰（低 = 容忍假陽性）
+  beta: 0.8      # FN 懲罰（高 = 強力懲罰漏偵）
+  gamma: 0.75    # 聚焦難例的指數
+
+dataset:
+  root: concreteCrackSegmentationDataset
+  splits_dir: data/splits
+  patch_size: 512
+  overlap: 128
+  num_workers: 0
+  prefetch_factor: 2
+  pin_memory: false
+  persistent_workers: false
+  precomputed_dir: data/patches
+  oversample_positive: true
+  positive_weight: 5.0
+
+checkpoint:
+  save_dir: outputs/checkpoints/ddrnet_ftl
+  save_best_metric: iou
+  save_every_n_epochs: 10
+
+evaluation:
+  metrics: [iou, dice, precision, recall, cldice]
+  threshold: 0.5
+  save_predictions: true
+  predictions_dir: outputs/predictions/ddrnet_ftl

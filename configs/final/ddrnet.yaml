@@ -69,6 +69,6 @@ checkpoint:
 
 evaluation:
   metrics: [iou, dice, precision, recall, cldice]
-  threshold: 0.5   # update after threshold_sweep.py
+  threshold: 0.5
   save_predictions: true
   predictions_dir: outputs/predictions/ddrnet

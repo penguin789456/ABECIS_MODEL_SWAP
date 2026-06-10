@@ -1,0 +1,71 @@
+# ============================================================
+# DDRNet-23-slim — Focal Tversky Loss + Dataset v3
+# ============================================================
+# 目的：在 FTL 損失函數基礎上加入 v3 資料增強
+#        驗證「損失函數改進 + 大規模 pseudo-label 資料」的組合效益
+#
+# 前置條件（patch cache 已存在，v3 訓練 PP-LiteSeg 時已產生）：
+#   data/patches_v3/   ← 共用，不需重新產生
+#   data/splits_v3/    ← 共用，不需重新產生
+#
+# 訓練指令：
+#   conda activate CrackSeg
+#   cd H:\ChihleeMaster\dev\ABECIS_MODEL_SWAP
+#   python training/train_crackseg.py --config configs/final/ddrnet_ftl_v3.yaml
+#
+# Resume：
+#   python training/train_crackseg.py --config configs/final/ddrnet_ftl_v3.yaml \
+#       --resume outputs/checkpoints/ddrnet_ftl_v3/best.pth
+#
+# 比較基準：
+#   ddrnet.yaml     → BCEDice + v0  IoU=0.3912  Rec=0.464
+#   ddrnet_ftl.yaml → FTL    + v0  （見 ddrnet_ftl 訓練結果）
+#   ppliteseg_v3.yaml → BCEDice + v3  IoU=0.4361  Rec=0.478
+# ============================================================
+
+model:
+  name: ddrnet
+  arch_type: DDRNet-23-slim
+  pretrained: false
+  num_classes: 1
+
+training:
+  optimizer: adamw
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  batch_size: 32
+  epochs: 150
+  warmup_epochs: 5
+  scheduler: cosine
+  seed: 42
+  output_dir: outputs
+
+loss:
+  type: focal_tversky
+  alpha: 0.2     # FP 懲罰（低 = 容忍假陽性）
+  beta: 0.8      # FN 懲罰（高 = 強力懲罰漏偵）
+  gamma: 0.75    # 聚焦難例的指數
+
+dataset:
+  root: dataset_merged_v3
+  splits_dir: data/splits_v3
+  precomputed_dir: data/patches_v3
+  patch_size: 512
+  overlap: 128
+  num_workers: 4
+  prefetch_factor: 4
+  pin_memory: true
+  persistent_workers: true
+  oversample_positive: true
+  positive_weight: 5.0
+
+checkpoint:
+  save_dir: outputs/checkpoints/ddrnet_ftl_v3
+  save_best_metric: iou
+  save_every_n_epochs: 10
+
+evaluation:
+  metrics: [iou, dice, precision, recall, cldice]
+  threshold: 0.5
+  save_predictions: true
+  predictions_dir: outputs/predictions/ddrnet_ftl_v3

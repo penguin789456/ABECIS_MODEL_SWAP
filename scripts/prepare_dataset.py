@@ -148,7 +148,7 @@ def build_coco_json(
             "segmentation": rle,
             "bbox": bbox,
             "area": area,
-            "iscrowd": 1,  # 1 = RLE format in COCO
+            "iscrowd": 0,  # 0 = not crowd; Detectron2 skips iscrowd=1 annotations
         })
         ann_id += 1
 

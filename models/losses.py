@@ -142,11 +142,19 @@ class FocalTverskyLoss(nn.Module):
     Reference: Salehi et al. 2017, "Tversky loss function for image segmentation
     using 3D fully convolutional deep networks"
 
+    Numerical stability fixes:
+    - Denominator clamped to >= smooth to prevent division by near-zero
+    - Tversky index clamped to [0, 1] to prevent negative base in power op
+      (bfloat16 / float16 arithmetic can produce tversky slightly > 1.0)
+    - (1 - tversky) clamped to [0, 1] before fractional exponent
+    - NaN fallback to BCE so training never silently diverges
+
     Args:
         alpha:  FP penalty weight (default 0.3 — tolerate some false alarms)
         beta:   FN penalty weight (default 0.7 — strongly penalise missed cracks)
         gamma:  Focal exponent; focuses gradient on hard examples (default 0.75)
         smooth: Laplace smoothing for denominator stability (default 1.0)
+        bce_weight: Small BCE term mixed in for gradient stability (default 0.1)
     """
 
     def __init__(
@@ -155,24 +163,45 @@ class FocalTverskyLoss(nn.Module):
         beta: float = 0.7,
         gamma: float = 0.75,
         smooth: float = 1.0,
+        bce_weight: float = 0.1,
     ):
         super().__init__()
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
         self.smooth = smooth
+        self.bce_weight = bce_weight
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        probs = torch.sigmoid(logits)
+        # Compute in float32 for numerical stability regardless of input dtype
+        logits_f = logits.float()
+        targets_f = targets.float()
+
+        probs = torch.sigmoid(logits_f)
         pf = probs.view(probs.size(0), -1)
-        tf = targets.view(targets.size(0), -1)
+        tf = targets_f.view(targets_f.size(0), -1)
 
         tp = (pf * tf).sum(dim=1)
         fp = (pf * (1.0 - tf)).sum(dim=1)
         fn = ((1.0 - pf) * tf).sum(dim=1)
 
-        tversky = (tp + self.smooth) / (
-            tp + self.alpha * fp + self.beta * fn + self.smooth
-        )
-        focal_tversky = (1.0 - tversky) ** self.gamma
-        return focal_tversky.mean()
+        # Clamp denominator to at least smooth to avoid division by ~0
+        denom = (tp + self.alpha * fp + self.beta * fn + self.smooth).clamp(min=self.smooth)
+        tversky = (tp + self.smooth) / denom
+
+        # Clamp tversky to [0, 1]: bfloat16/fp16 arithmetic can yield tversky > 1
+        # which makes (1 - tversky) negative → NaN on fractional power
+        tversky = tversky.clamp(0.0, 1.0)
+
+        focal_tversky = (1.0 - tversky).clamp(min=0.0) ** self.gamma
+        ftl_loss = focal_tversky.mean()
+
+        # Small BCE term for gradient stability (prevents all-positive collapse)
+        bce_loss = F.binary_cross_entropy_with_logits(logits_f, targets_f)
+        loss = (1.0 - self.bce_weight) * ftl_loss + self.bce_weight * bce_loss
+
+        # Safety net: if NaN still occurs, fall back to pure BCE
+        if not torch.isfinite(loss):
+            loss = bce_loss
+
+        return loss

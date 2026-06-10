@@ -82,7 +82,10 @@ def main(cfg: dict, batch_size: int) -> None:
 
     ckpt_path = Path(cfg["checkpoint"]["save_dir"]) / "best.pth"
     if ckpt_path.exists():
-        model.load_state_dict(torch.load(ckpt_path, map_location=device))
+        ckpt = torch.load(ckpt_path, map_location=device)
+        # Handle both raw state_dict and wrapped {model: state_dict, ...} format
+        state_dict = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
+        model.load_state_dict(state_dict)
         print(f"Loaded checkpoint: {ckpt_path}")
     else:
         print(f"No checkpoint found at {ckpt_path} — benchmarking untrained model")
@@ -112,7 +115,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=1)
     args = parser.parse_args()
 
-    with open(args.config) as f:
+    with open(args.config, encoding='utf-8') as f:
         cfg = yaml.safe_load(f)
 
     main(cfg, args.batch_size)

@@ -1,0 +1,29 @@
+﻿model:
+  name: maskrcnn
+  pretrained: true
+
+training:
+  optimizer: sgd
+  lr: 0.005
+  momentum: 0.9
+  weight_decay: 1.0e-4
+  batch_size: 2
+  epochs: 1
+  warmup_epochs: 1
+  lr_steps: [1]
+  pretrained: true
+  num_workers: 0
+  seed: 42
+
+dataset:
+  root: concreteCrackSegmentationDataset
+  splits_dir: data/splits
+
+checkpoint:
+  save_dir: outputs/checkpoints/maskrcnn_tv_abecis_smoketest
+  eval_period_epochs: 1
+
+evaluation:
+  predictions_dir: outputs/predictions/maskrcnn_tv_abecis_smoketest
+  threshold: 0.5
+  score_threshold: 0.3
