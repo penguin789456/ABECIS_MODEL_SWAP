@@ -1,0 +1,3 @@
+conda env create -n CrackPre -f ComplateENV.yml
+call conda activate CrackPre
+pip install -e detectron2 --no-build-isolation

@@ -8,9 +8,10 @@ against a **Mask R-CNN** baseline for concrete crack detection.
 instance-segmentation framework with minimal accuracy loss while drastically
 reducing compute, enabling real-time edge deployment (e.g. NVIDIA Jetson)?
 
-> This repository contains **training and validation code only**. The
-> cross-dataset inference / benchmarking pipeline and its outputs live outside
-> this repo.
+This repository covers the **complete pipeline — training → export → inference →
+validation**: it trains the segmentation models, exports them to TorchScript,
+runs patch sliding-window inference across datasets, and scores predictions
+against ground truth (pixel metrics + clDice).
 
 ---
 
@@ -49,6 +50,32 @@ Add the project root **and** the cloned backbone repo to `PYTHONPATH` when runni
 ```bash
 export PYTHONPATH="$PWD:$PWD/realtime-semantic-segmentation-pytorch"   # Windows: set / $env:
 ```
+
+### ABECIS / Detectron2 environment (Mask R-CNN baseline only)
+
+The ABECIS Mask R-CNN baseline runs on **Detectron2**, which is incompatible with
+RTX 50-series (sm_120) and therefore runs on **CPU** in its own conda environment
+(`CrackPre`, torch 2.7.0). It is **only needed for ABECIS inference** — skip it if
+you only train the lightweight segmentation models. Setup files live in
+[`detectron2 setup DM/`](detectron2%20setup%20DM):
+
+```bash
+# 1. Create the CrackPre env (Detectron2 dependencies, torch 2.7.0)
+conda env create -n CrackPre -f "detectron2 setup DM/ComplateENV.yaml"
+conda activate CrackPre
+# 2. Clone Detectron2 and build it in-place
+git clone https://github.com/facebookresearch/detectron2
+pip install -e detectron2 --no-build-isolation      # or run: "detectron2 setup DM/Fixdetectron2.bat"
+```
+
+| File | Purpose |
+|------|---------|
+| `detectron2 setup DM/ComplateENV.yaml` | Full `CrackPre` conda env (torch 2.7.0 + Detectron2 deps, Python 3.11) |
+| `detectron2 setup DM/Fixdetectron2.bat` | Activate `CrackPre` and `pip install -e detectron2 --no-build-isolation` |
+| `detectron2 setup DM/setUp.txt` | The two setup commands (env create + editable install) |
+
+Point the ABECIS inference scripts at your trained Detectron2 checkpoint
+(`model_final.pth`, Mask R-CNN R50-FPN).
 
 ---
 
@@ -139,7 +166,33 @@ python scripts/export_ppliteseg_torchscript.py     # → outputs/checkpoints/ppl
 
 ---
 
-## 5. Project structure
+## 5. Inference & cross-dataset evaluation
+
+Completes the **train → export → infer → validate** flow: run 512×512 patch
+sliding-window inference (overlap 128, stride 384; overlap regions averaged),
+then score predictions against ground truth. See [`infernce/README.md`](infernce/README.md).
+
+```bash
+# Segmentation models (venv) — in-domain (Mendeley) and cross-domain (CFD)
+PYTHONIOENCODING=utf-8 PYTHONPATH="$PWD:$PWD/realtime-semantic-segmentation-pytorch" \
+  python infernce/mendeley_patch_inference.py --model ppliteseg --device cuda
+python infernce/cfd_patch_inference.py --model ppliteseg --device cuda
+
+# ABECIS (Detectron2, CrackPre conda env, CPU) — see "ABECIS / Detectron2 environment"
+python infernce/abecis_mendeley_patch_inference.py --threshold 0.8 --device cpu --resume
+
+# Ground-truth evaluation (IoU / Dice / Precision / Recall + clDice)
+python ground_truth/evaluate_gt_with_cldice.py --model ppliteseg_mendeley_patch --dataset mendeley --device gpu
+```
+
+Per-model inference thresholds (from the validation sweep):
+PP-LiteSeg 0.65 · DeepLabV3 0.45 · DDRNet / DDRNet-FTL 0.50 · ABECIS 0.80.
+ABECIS is detection-based — per-patch instance masks are **unioned** into a
+binary full-image mask (no cross-patch NMS issue).
+
+---
+
+## 6. Project structure
 
 ```
 ├── configs/
@@ -160,14 +213,17 @@ python scripts/export_ppliteseg_torchscript.py     # → outputs/checkpoints/ppl
 │   └── lr_scheduler.py        # warmup + CosineAnnealingLR
 ├── evaluation/
 │   ├── metrics.py             # IoU / Dice / P / R / clDice
-│   ├── evaluate.py            # checkpoint evaluation
+│   ├── evaluate.py            # score prediction masks vs ground truth
 │   └── inference_*.py         # single-image inference helpers
 ├── scripts/
 │   ├── prepare_dataset.py / prepare_external.py / prepare_surface_crack.py
 │   ├── precompute_patches.py  # build 512×512 patch cache
 │   ├── threshold_sweep.py / benchmark_fps.py / benchmark_loader.py
 │   └── export_*_torchscript.py
-├── requirements.txt
+├── infernce/                  # cross-dataset patch sliding-window inference (see infernce/README.md)
+├── ground_truth/              # GT evaluation incl. clDice (--dataset cfd|mendeley)
+├── detectron2 setup DM/       # ABECIS / Detectron2 (CrackPre) env setup files
+├── requirements.txt           # segmentation models (venv/pip)
 ├── CLAUDE.md                  # project status / results / notes
 └── LICENSE
 ```
